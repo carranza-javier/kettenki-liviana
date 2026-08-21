@@ -8,11 +8,11 @@ set -euo pipefail
 
 : "${CONTENT_BUCKET:?set CONTENT_BUCKET to a globally unique bucket name}"
 : "${ALERT_EMAIL:?set ALERT_EMAIL to the address that receives budget alarms}"
+: "${ALLOWED_ORIGIN:?set ALLOWED_ORIGIN to the site origin, e.g. https://example.com}"
 
 STACK_NAME="${STACK_NAME:-liviana}"
 PROJECT_NAME="${PROJECT_NAME:-liviana}"
 REGION="${REGION:-eu-central-1}"
-ALLOWED_ORIGIN="${ALLOWED_ORIGIN:-*}"
 MODEL_ID="${MODEL_ID:-eu.anthropic.claude-haiku-4-5-20251001-v1:0}"
 CONTENT_FILE="${CONTENT_FILE:-content/content.json}"
 CONTENT_KEY="${CONTENT_KEY:-content.json}"

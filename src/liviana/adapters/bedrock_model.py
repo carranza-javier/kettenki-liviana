@@ -24,6 +24,15 @@ _MARKDOWN_PATTERNS = [
     (re.compile(r"^```.*$", re.M), ""),
 ]
 
+# House style for this client's copy: no em or en dashes, ever. Rule 7 asks the
+# model for that, but models reach for them anyway, so they are normalised here
+# too -- spaced ones become a comma, glued ones (word-em-word) get spaced out.
+_DASHES = [
+    (re.compile(r"\s+[—–]\s+"), ", "),
+    (re.compile(r"(?<=\w)[—–](?=\w)"), ", "),
+    (re.compile(r"[—–]"), "-"),
+]
+
 
 def strip_markdown(text: str) -> str:
     """The widget renders plain text; rule 7 asks the model for plain text.
@@ -31,7 +40,7 @@ def strip_markdown(text: str) -> str:
     Models drift anyway, so the formatting is removed here as well rather than
     letting stray asterisks reach the bubble.
     """
-    for pattern, replacement in _MARKDOWN_PATTERNS:
+    for pattern, replacement in _MARKDOWN_PATTERNS + _DASHES:
         text = pattern.sub(replacement, text)
     return text.strip()
 

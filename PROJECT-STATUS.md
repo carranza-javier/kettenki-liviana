@@ -1,6 +1,6 @@
 # Liviana — Project Status
 
-_Letzte Aktualisierung: 2026-08-21 (Backend von null gebaut: Mock lokal, echte AWS-Infrastruktur als CloudFormation, API-Vertrag für das Widget)_
+_Letzte Aktualisierung: 2026-08-21 (in `eu-central-1` deployt und gegen echtes Bedrock verifiziert, Git initialisiert, vier Prompt-Defekte nach den Live-Tests behoben)_
 
 > **Hinweis:** Dieses Dokument wird laufend aktualisiert, sobald sich am Projektstand etwas ändert. Bei jedem Fortschritt (erledigt, blockiert, neu offen) hier nachführen, nicht nur in `DECISIONS.md`. Claude pflegt es in jeder Sitzung selbstständig nach, ohne dass Javi danach fragen muss.
 
@@ -9,7 +9,7 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
 ## Arbeitsmodus
 
 - **Dieses Repo ist nur das Backend.** Das schwebende Widget lebt in `kettenki-website`. Die einzige Verbindung zwischen beiden ist `API.md`.
-- **Alles lokal, nichts deployt.** Es steht noch kein einziges AWS-Ressourcen-Objekt in Javis Konto. Der Mock-Backend (`LIVIANA_BACKEND=mock`) braucht kein AWS-Konto und keine Bedrock-Aufrufe.
+- **Produktion läuft** in `eu-central-1`, Stack `liviana`. Der Mock (`LIVIANA_BACKEND=mock`) bleibt die Standard-Teststufe: er braucht kein AWS-Konto und verbraucht kein Tagesbudget. Gegen die echte API nur testen, wenn es um Modellverhalten oder Infrastruktur geht.
 - **Keine Test-Stage in AWS.** Gleiche Regel wie in `kettenki-website`: Overengineering für ein Ein-Personen-Projekt. Der Mock ist die Teststufe.
 - Python 3.11+, keine Abhängigkeiten außer der stdlib und dem boto3, das die Lambda-Laufzeit schon mitbringt. Kein Build-System, kein virtualenv nötig.
 - **Nichts Kundenspezifisches im Code.** Alles zu KettenKI steht in `content/content.json`; Infrastrukturnamen kommen aus Umgebungsvariablen. Ein Test erzwingt das.
@@ -33,24 +33,39 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
   4. **`localStorage` statt `sessionStorage`** im Widget-Vertrag, Sprachen DE/EN/ES statt vier.
   5. **"Ist nicht Bambera, nicht Fandango"** als `identity.scope_note` ins Inhaltsdokument und in den Rollenblock des Prompts.
 
+- [x] **Git initialisiert und erster Commit** (`main`, 33 Dateien). Vor dem Commit Secret-Scan über Arbeitsbaum und Historie: keine AWS-Schlüssel, keine privaten Schlüssel, keine Tokens, keine `.env`. `info@kettenki.com` steht drin, ist aber die öffentliche Geschäftsadresse der Website, kein Geheimnis.
+- [x] **Erster echter Deploy nach `eu-central-1`**, Stack `liviana`. API: `https://mr3w04rnrf.execute-api.eu-central-1.amazonaws.com` (`/chat`, `/health`). Bucket `kettenki-liviana-content` war frei, kein Suffix nötig. `AllowedOrigin` steht live auf `https://kettenki.com`, Modell auf `eu.anthropic.claude-haiku-4-5-20251001-v1:0` (in der Region als ACTIVE bestätigt), Tageslimit 500, TTL auf beiden Tabellen ENABLED, Budget 5 USD.
+- [x] **`tools/smoke.py` gegen die echte API: alle Checks grün.** Health, erste Antwort, Verlauf beim Folgeturn, ausgestellte Session-ID, beide 400-Fälle und die Kürzung langer Nachrichten, alles gegen echtes Bedrock.
+- [x] **Rate Limit gegen die echte Infrastruktur verifiziert**: 20 Nachrichten angenommen, die 21. mit `429`, `error=rate_limited`, `retryAfter=24` und passendem `Retry-After`-Header. Kein Mock.
+- [x] **Vier Prompt-Defekte gefunden und behoben, die nur im echten Modell sichtbar waren.** Der Mock konnte sie prinzipiell nicht zeigen, weil er kein Sprachmodell ist:
+  1. **Antworten waren viel zu lang** (drei Absätze statt vier Sätzen). Regel 3 war als weicher Hinweis formuliert. Jetzt ein hartes Limit mit Begründung ("das ist eine Chat-Blase, keine Webseite", ein Absatz, keine Leerzeilen).
+  2. **Englische Preisfrage wurde auf Deutsch beantwortet.** Der Sprachblock im Prompt ist nach Sprachcode geschlüsselt, und das Modell griff sich den deutschen Eintrag. Preisregel und Ablehnungsregel sagen jetzt ausdrücklich, dass der passende Schlüssel zu wählen bzw. zu übersetzen ist.
+  3. **Gedankenstriche in den Antworten**, gegen die Stilregel des Hauses. Jetzt Regel 7 im Prompt plus eine Normalisierung in `strip_markdown()`, die Halbgeviert- und Geviertstriche in Kommas umschreibt. Live nachgemessen: null Treffer.
+  4. **Registerbruch du/Sie** mitten in einer Antwort. `identity.voice` im Inhaltsdokument legt das Duzen jetzt fest, samt Entsprechung für Englisch und Spanisch.
+- [x] **Reserved Concurrency musste raus, weil das Konto es nicht zulässt** (siehe Entscheidungen). `ReservedConcurrency` ist im Template jetzt über eine Condition abschaltbar (`0` lässt die Eigenschaft weg), statt den Deploy scheitern zu lassen.
+- [x] **`AllowedOrigin` hat keinen Default mehr.** Vorher stand `*` als Vorgabewert im Template und im Deploy-Skript, was genau der Fehler ist, den man um drei Uhr morgens macht. Jetzt Pflichtparameter mit Musterprüfung, in beiden Skripten.
+- [x] **Zwei PowerShell-5.1-Fallen im Deploy-Skript behoben**, die den ersten Lauf abbrachen: `2>&1` bzw. `2>$null` auf `aws.exe` verpackt jede stderr-Zeile in einen `NativeCommandError`, der unter `$ErrorActionPreference = "Stop"` auch bei Exit-Code 0 wirft. Jetzt wird nur der Exit-Code ausgewertet, und für erwartbare Fehlschläge (Bucket-Probe) gibt es `Test-Aws`, das die Preference kurzzeitig senkt.
+- [x] **58 Tests grün**, inklusive der neuen Zusicherungen für die vier Fixes.
+
 ## Blockiert — wartet auf Input
 
-- **Nichts ist technisch blockiert.** Der nächste Schritt braucht aber Javis Konto und seine Freigabe: ohne aktivierten Bedrock-Modellzugriff und ohne bestätigte Modell-ID kann niemand außer ihm den ersten Deploy sinnvoll durchführen.
+- **SNS-Bestätigung durch Javi.** Das Topic `liviana-alerts` hat zwei ausstehende Bestätigungen an `info@kettenki.com` (eine stammt aus dem fehlgeschlagenen ersten Deploy, CloudFormation legte beim Update eine zweite an). **Bis Javi eine davon per Mail bestätigt, sind alle Alarme stumm** — Circuit Breaker offen, Funktionsfehler, Throttles. Die zweite verfällt nach drei Tagen von selbst.
+- **GitHub-Repo anlegen.** Die `gh` CLI ist auf dieser Maschine nicht installiert, das Remote kann also nicht von hier aus erzeugt werden. Der Commit liegt lokal und wartet auf ein leeres Repo unter `carranza-javier/kettenki-liviana`.
 
 ## Nächster Schritt
 
-1. **Javi aktiviert den Bedrock-Modellzugriff** in der Konsole (Bedrock → Model access → Anthropic) und prüft, welche Inference-Profile-ID in seiner Region wirklich existiert: `aws bedrock list-inference-profiles --region eu-central-1`. Der Default im Template ist `eu.anthropic.claude-haiku-4-5-20251001-v1:0`, ungeprüft.
-2. **Erster Deploy** mit `scripts/deploy.ps1`, danach `python tools/smoke.py <ChatEndpoint>` gegen die echte API. Erst dieser Lauf beweist, dass Bedrock, DynamoDB-TTL und der Circuit Breaker in echt zusammenspielen — bisher ist alles nur gegen den Mock verifiziert.
-3. **Danach erst das Widget** in `kettenki-website` bauen, gegen `API.md`.
+1. **SNS-Mail bestätigen** und das GitHub-Repo anlegen, dann `git push -u origin main`. Beides steht unter Blockiert.
+2. **Lambda-Kontingent erhöhen lassen** (Service Quotas → Lambda → "Concurrent executions", von 10 auf 1000), danach einmal mit `-ReservedConcurrency 5` neu deployen. Bis dahin fehlt eine der fünf Schutzschichten, siehe Entscheidungen.
+3. **Danach das Widget** in `kettenki-website` bauen, gegen `API.md`. Die API ist live und der Vertrag ist verifiziert, das ist keine Vorarbeit mehr, die hier passieren muss.
 
 ## Offen (noch nicht begonnen)
 
-- [ ] **Erster echter Deploy in AWS.** Nichts von der Infrastruktur ist jemals gelaufen; das Template ist strukturell geprüft (alle Refs lösen auf), aber nie von CloudFormation angenommen worden.
-- [ ] **Echte Antwortqualität prüfen.** Bisher hat nur der Keyword-Mock geantwortet. Ob Haiku bei dieser Prompt-Fassung wirklich kurz bleibt, keine Preise erfindet und die Sprache des Besuchers trifft, ist offen, bis es einmal live lief.
-- [ ] **`AllowedOrigin` auf `https://kettenki.com` setzen** vor dem Live-Gang. Default ist `*`, was jede beliebige Seite im Netz das Tagesbudget verbrauchen lässt.
-- [ ] **Git-Repo initialisieren.** Dieses Verzeichnis ist noch kein Git-Repo; nichts ist committet.
+- [ ] **Reserved Concurrency nachrüsten**, sobald das Lambda-Kontingent erhöht ist. Aktuell mit `0` deployt, weil das Konto es nicht anders zulässt.
+- [ ] **Bekannter Rauer Kanten: Prompt-Injektionsversuche werden auf Deutsch abgewiesen**, auch wenn sie auf Englisch oder Spanisch geschrieben sind. Normale Themenablehnungen (Javi als Kandidat, Rechtsberatung) treffen die Sprache korrekt, verifiziert in DE, EN und ES. Nur der Injektionspfad fällt in die deutsche Stimme aus `identity.voice` zurück. Drei Prompt-Fassungen haben daran nichts geändert; der Schaden ist gering (ein Angreifer bekommt eine deutsche statt einer englischen Abfuhr), deshalb bewusst so gelassen. Wieder aufmachen, wenn es ein echtes Modell-Upgrade gibt oder jemand sich daran stört.
+- [ ] **Antwortlänge im Alltag beobachten.** Nach dem Fix liegen die Antworten bei drei bis vier Sätzen, also am oberen Rand der Regel. Wenn sie im Widget zu wuchtig wirken, ist `max_sentences` in `prompt.py` bzw. `-MaxTokens` im Deploy die Stellschraube.
 - [ ] Widget in `kettenki-website` (steht dort schon als offener Punkt: Katzen-Avatar, Zustände, `chat-mock.js`).
 - [ ] Bedrock Guardrails, falls sich nach echtem Traffic zeigt, dass Prompt plus enges Inhaltsdokument nicht reichen. Bewusst zurückgestellt, siehe Verworfen.
+- [ ] `.github/workflows` für die Tests, falls das Repo öffentlich wird und die grüne Suite sichtbar sein soll. Nicht dringend.
 
 ## Verworfen — nicht wieder aufnehmen
 
@@ -74,20 +89,25 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
 - **Inhalt ändern heißt nicht deployen.** `content/content.json` bearbeiten, nach S3 kopieren, nach höchstens fünf Minuten (Cache-TTL) ist es live. Der Bucket ist versioniert, ein schlechter Edit ist zurückrollbar.
 - **Keine Gedankenstriche im Copy.** Gleiche Stilregel wie im Website-Repo, gilt auch für Texte im Inhaltsdokument.
 - **Keine Aussagen über aktive Produktion oder tägliche Nutzung von Bambera** — auch nicht im Prompt oder im Inhaltsdokument. Testdauer sind drei Monate.
+- **Reserved Concurrency ist zurzeit aus, nicht aus Überzeugung, sondern weil das Konto es verbietet.** Das Lambda-Kontingent für gleichzeitige Ausführungen steht auf 10, dem Wert für noch nicht hochgestufte Konten; AWS verlangt mindestens 10 unreservierte, also ist jede Reservierung unmöglich. Der Deploy scheiterte daran ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]"). Praktisch wirkt das Kontingent selbst wie eine Obergrenze von 10, nur kontoweit statt pro Funktion: ein Amoklauf in Liviana könnte also andere Lambdas im selben Konto aushungern, statt nur sich selbst zu drosseln. Nach der Kontingenterhöhung mit `-ReservedConcurrency 5` neu deployen.
+- **Der Mock kann Modellverhalten nicht prüfen, nur den Ablauf.** Alle vier Prompt-Defekte dieser Sitzung waren mit 56 grünen Tests unsichtbar und fielen erst beim ersten echten Bedrock-Aufruf auf. Für künftige Prompt-Änderungen gilt deshalb: nach dem Deploy mindestens einmal in DE, EN und ES gegenprüfen, mit einer Preisfrage, einer Frage nach technischen Interna und einer nach Javi als Kandidat.
+- **Ein Deploy ist billig, ein falscher Default teuer.** `AllowedOrigin` hat deshalb bewusst keinen Vorgabewert mehr. Lieber ein abgebrochener Deploy mit fehlendem Pflichtparameter als ein stiller `*` in Produktion.
+- **Der Content-Bucket überlebt einen `delete-stack`** (`DeletionPolicy: Retain`). Beim Aufräumen des fehlgeschlagenen ersten Versuchs musste er deshalb von Hand gelöscht werden, sonst wäre der zweite Deploy an "bucket already exists" gescheitert. Gleiche Falle bei jedem künftigen Neuaufbau von null.
 
 ## Offene Fragen an Javi
 
-- **Region und Modell-ID**: bleibt es bei `eu-central-1` und dem EU-Inference-Profile für Haiku? Der Default im Template ist ungeprüft.
-- **Monatsbudget**: der Budget-Alarm steht auf 10 USD. Ist das die Zahl, bei der Javi geweckt werden will?
-- **Tagesdeckel 500 Aufrufe**: der Wert kommt aus dem Architekturdokument. Ob er für den echten Besucherstrom von kettenki.com großzügig oder knapp ist, weiß erst der erste Monat.
-- **Soll dieses Repo öffentlich oder privat sein?** Bei `kettenki-bambera` fiel die Entscheidung auf öffentlich. Hier steht kein Kundendatensatz drin, aber die Entscheidung gehört Javi.
+- ~~Region und Modell-ID?~~ **Entschieden: `eu-central-1` und `eu.anthropic.claude-haiku-4-5-20251001-v1:0`** (2026-08-21), in der Region als ACTIVE bestätigt und live im Einsatz.
+- ~~Monatsbudget?~~ **Entschieden: 5 USD** (2026-08-21), Alarm bei 80 % Ist und 100 % Prognose an `info@kettenki.com`.
+- ~~Öffentlich oder privat?~~ **Entschieden: öffentlich** (2026-08-21), wie `kettenki-bambera`.
+- **Tagesdeckel 500 Aufrufe**: unverändert übernommen. Ob er für den echten Besucherstrom von kettenki.com großzügig oder knapp ist, weiß erst der erste Monat. Der Zähler steht in `liviana-limits` unter `BUDGET#<Datum>` und ist mit einem `scan` ablesbar.
+- **Soll die Portfolio-Fiche `liviana.html` in `kettenki-website` jetzt einen Repo-Link bekommen?** Gleiche Frage, die dort schon für Bambera offen war.
 
 ## Session wieder aufnehmen
 
 Kurzform für den Einstieg in eine neue Sitzung:
 
 1. **Erst diese Datei lesen**, dann `liviana-arquitectura.md` (was geschlossen ist), dann `DECISIONS.md` (warum die Umsetzung so aussieht). `API.md` nur, wenn es um das Widget geht.
-2. **Läuft es noch?** `python -m pytest tests -q` → 56 Tests grün, ohne AWS-Konto. Danach `python tools/chat.py` für einen echten Dialog gegen den Mock.
-3. **Wo steht das Projekt?** Nichts ist deployt, nichts ist committet. Der nächste Schritt steht oben unter "Nächster Schritt".
+2. **Läuft es noch?** `python -m pytest tests -q` → 58 Tests grün, ohne AWS-Konto. Danach `python tools/chat.py` für einen Dialog gegen den Mock, und `python tools/smoke.py https://mr3w04rnrf.execute-api.eu-central-1.amazonaws.com` gegen die echte API (kostet ein paar Aufrufe vom Tagesbudget).
+3. **Wo steht das Projekt?** Deployt und verifiziert in `eu-central-1`, Stack `liviana`. Lokal committet auf `main`, aber noch nicht auf GitHub. Der nächste Schritt steht oben.
 4. **Was nicht wieder aufmachen:** alles unter "Verworfen". Besonders WAF, RAG, SAM/CDK und der Verlauf im Browser.
 5. **Am Ende der Sitzung** diese Datei nachführen: Erledigtes nach unten in "Erledigt", Neues nach "Offen", Entscheidungen nach "Entscheidungen / Notizen", Datum in der Kopfzeile aktualisieren.

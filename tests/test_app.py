@@ -132,3 +132,12 @@ def test_direct_invoke_payload_is_accepted():
     """Console tests and the smoke script pass the fields flat."""
     response = app.handler({"message": "hallo", "sessionId": "session-0001"})
     assert response["statusCode"] == 200
+
+
+def test_dashes_are_normalised_out_of_answers():
+    """House style: no em or en dashes in KettenKI copy, model included."""
+    from liviana.adapters.bedrock_model import strip_markdown
+
+    assert strip_markdown("Kette — robust") == "Kette, robust"
+    assert strip_markdown("communication—like this") == "communication, like this"
+    assert strip_markdown("**bold** stays") == "bold stays"

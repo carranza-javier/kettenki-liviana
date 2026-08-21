@@ -22,13 +22,15 @@
 param(
     [Parameter(Mandatory = $true)][string]$ContentBucketName,
     [Parameter(Mandatory = $true)][string]$AlertEmail,
-    [string]$AllowedOrigin = "*",
+    [Parameter(Mandatory = $true)][string]$AllowedOrigin,
     [string]$StackName = "liviana",
     [string]$ProjectName = "liviana",
     [string]$Region = "eu-central-1",
     [string]$ModelId = "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
     [string]$ContentFile = "content/content.json",
     [string]$ContentKey = "content.json",
+    [int]$MaxTokens = 400,
+    [int]$HistoryPairs = 4,
     [int]$RateLimitPerMinute = 20,
     [int]$DailyInvocationLimit = 500,
     [int]$ReservedConcurrency = 5,
@@ -45,11 +47,31 @@ if ($AwsProfile) { $awsCommon += @("--profile", $AwsProfile) }
 
 function Invoke-Aws {
     param([string[]]$Arguments)
-    $output = & aws @Arguments 2>&1
+    # No 2>&1 here on purpose: in Windows PowerShell 5.1 redirecting a native
+    # command's stderr wraps every line in a NativeCommandError, which under
+    # $ErrorActionPreference = "Stop" throws even when the exe exited 0.
+    # The exit code is the only signal worth trusting.
+    $output = & aws @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "aws $($Arguments -join ' ') failed:`n$output"
+        throw "aws $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
     }
     return $output
+}
+
+function Test-Aws {
+    # For probes where a non-zero exit is an expected answer, not a failure.
+    # $ErrorActionPreference has to drop to Continue for the duration, or the
+    # NativeCommandError from the exe's stderr becomes a terminating error.
+    param([string[]]$Arguments)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & aws @Arguments 2>&1 | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    }
+    finally {
+        $ErrorActionPreference = $previous
+    }
 }
 
 Write-Host "==> Identity" -ForegroundColor Cyan
@@ -60,8 +82,7 @@ Write-Host "    account $accountId, region $Region"
 # --- 1. artifact bucket ------------------------------------------------------
 $artifactBucket = "$ProjectName-artifacts-$accountId-$Region"
 Write-Host "==> Artifact bucket $artifactBucket" -ForegroundColor Cyan
-& aws s3api head-bucket --bucket $artifactBucket @awsCommon 2>$null
-if ($LASTEXITCODE -ne 0) {
+if (-not (Test-Aws (@("s3api", "head-bucket", "--bucket", $artifactBucket) + $awsCommon))) {
     Write-Host "    creating"
     if ($Region -eq "us-east-1") {
         Invoke-Aws (@("s3api", "create-bucket", "--bucket", $artifactBucket) + $awsCommon) | Out-Null
@@ -104,6 +125,8 @@ $parameters = @(
     "ModelId=$ModelId",
     "LambdaCodeBucket=$artifactBucket",
     "LambdaCodeKey=$codeKey",
+    "MaxTokens=$MaxTokens",
+    "HistoryPairs=$HistoryPairs",
     "RateLimitPerMinute=$RateLimitPerMinute",
     "DailyInvocationLimit=$DailyInvocationLimit",
     "ReservedConcurrency=$ReservedConcurrency",
@@ -119,7 +142,7 @@ Invoke-Aws (@("cloudformation", "deploy",
 
 # --- 4. content --------------------------------------------------------------
 Write-Host "==> Uploading content document" -ForegroundColor Cyan
-python -c "import json,sys; json.load(open(sys.argv[1], encoding='utf-8'))" $ContentFile
+& python -c "import json,sys; json.load(open(sys.argv[1], encoding='utf-8'))" $ContentFile
 if ($LASTEXITCODE -ne 0) { throw "$ContentFile is not valid JSON." }
 Invoke-Aws (@("s3", "cp", $ContentFile, "s3://$ContentBucketName/$ContentKey",
         "--content-type", "application/json") + $awsCommon) | Out-Null

@@ -28,11 +28,11 @@ Parameters:
 
   AllowedOrigin:
     Type: String
-    Default: "*"
+    AllowedPattern: "https://.+|http://localhost(:[0-9]+)?"
     Description: >
-      Origin allowed to call the API, e.g. https://kettenki.com. Set this to the
-      real site before going live; "*" lets any page on the internet spend the
-      daily budget.
+      Origin allowed to call the API, e.g. https://kettenki.com. Deliberately
+      has no default: "*" would let any page on the internet spend the daily
+      budget, so it must be stated on every deploy.
 
   ModelId:
     Type: String
@@ -93,10 +93,14 @@ Parameters:
   ReservedConcurrency:
     Type: Number
     Default: 5
-    MinValue: 1
+    MinValue: 0
     Description: >
       Hard ceiling on parallel executions. Also isolates this function from the
       account concurrency pool, so a runaway here cannot starve other Lambdas.
+      Set to 0 to leave it unset, which is the only option on an account whose
+      total concurrency quota is still the unverified-account default of 10:
+      AWS refuses any reservation that would drop unreserved capacity below 10.
+      Raise the Lambda "Concurrent executions" quota, then redeploy with 5.
   ApiRateLimit:
     Type: Number
     Default: 10
@@ -119,6 +123,11 @@ Parameters:
   LogRetentionDays:
     Type: Number
     Default: 14
+
+Conditions:
+  # A reservation of 0 is not "reserve nothing", it is "allow nothing", so the
+  # property has to be omitted entirely rather than set to zero.
+  HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, 0]]
 
 Resources:
   # ---------------------------------------------------------------------------
@@ -250,7 +259,10 @@ Resources:
       Role: !GetAtt ChatFunctionRole.Arn
       MemorySize: 512
       Timeout: 25
-      ReservedConcurrentExecutions: !Ref ReservedConcurrency
+      ReservedConcurrentExecutions: !If
+        - HasReservedConcurrency
+        - !Ref ReservedConcurrency
+        - !Ref AWS::NoValue
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Ref LambdaCodeKey
