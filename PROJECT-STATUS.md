@@ -1,6 +1,6 @@
 # Liviana — Project Status
 
-_Letzte Aktualisierung: 2026-08-21 (auf GitHub gepusht, Kontingenterhöhung für Lambda beantragt und noch PENDING, Reserved Concurrency wartet darauf)_
+_Letzte Aktualisierung: 2026-08-21 (SNS bestätigt, Alarme scharf; auf GitHub gepusht; Kontingenterhöhung für Lambda im Support-Fall)_
 
 > **Hinweis:** Dieses Dokument wird laufend aktualisiert, sobald sich am Projektstand etwas ändert. Bei jedem Fortschritt (erledigt, blockiert, neu offen) hier nachführen, nicht nur in `DECISIONS.md`. Claude pflegt es in jeder Sitzung selbstständig nach, ohne dass Javi danach fragen muss.
 
@@ -50,9 +50,12 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
 - [x] **Repo ist auf GitHub**, öffentlich unter `https://github.com/carranza-javier/kettenki-liviana`. Drei Commits auf `main`, `origin/main` verfolgt. Vor dem Push noch einmal die vollständige Historie auf Zugangsdaten geprüft: sauber.
 - [x] **Kontingenterhöhung für Lambda beantragt**: `Concurrent executions` (Quota-Code `L-B99A9384`) in `eu-central-1` von 10 auf 1000, per `aws service-quotas request-service-quota-increase`. Request-ID `554e9c57d7d24d59b0a8092fdb44dc81sDpYzldS`. Der Status wanderte innerhalb weniger Minuten von `PENDING` auf **`CASE_OPENED`**: AWS hat dafür einen Support-Fall geöffnet, die Freigabe läuft also über einen Menschen und nicht automatisch. Das effektive Kontingent steht weiterhin auf 10, deshalb konnte Reserved Concurrency in dieser Sitzung nicht nachgerüstet werden, siehe Blockiert.
 
+- [x] **SNS-Abo bestätigt, die Alarmkette ist damit scharf.** `PendingConfirmation: false` auf `arn:...:liviana-alerts:31f2e4ae`, die doppelte Anfrage aus dem fehlgeschlagenen ersten Deploy ist verschwunden. Alle drei Alarme (`liviana-circuit-breaker-open`, `liviana-function-errors`, `liviana-function-throttles`) stehen auf `OK`, `ActionsEnabled: true`, und zeigen auf das Topic. Die beiden Budget-Benachrichtigungen (80 % Ist, 100 % Prognose) gehen ohnehin direkt per Mail an `info@kettenki.com` und brauchen keine Bestätigung.
+
+  Am Rande, damit es beim nächsten Nachschauen nicht beunruhigt: `ConfirmationWasAuthenticated` steht auf `false`. Das heißt nur, dass per Klick auf den Link in der Mail bestätigt wurde und nicht über einen signierten API-Aufruf. Für ein E-Mail-Abo ist das der Normalfall, nicht ein halb fertiger Zustand.
+
 ## Blockiert — wartet auf Input
 
-- **SNS-Bestätigung durch Javi.** Das Topic `liviana-alerts` hat zwei ausstehende Bestätigungen an `info@kettenki.com` (eine stammt aus dem fehlgeschlagenen ersten Deploy, CloudFormation legte beim Update eine zweite an). **Bis Javi eine davon per Mail bestätigt, sind alle Alarme stumm** — Circuit Breaker offen, Funktionsfehler, Throttles. Die zweite verfällt nach drei Tagen von selbst.
 - **Kontingenterhöhung für Lambda, Status `CASE_OPENED`.** Solange AWS den Antrag nicht bewilligt hat, bleibt das Konto bei 10 gleichzeitigen Ausführungen und **jede** Reservierung wird abgelehnt, weil mindestens 10 unreserviert bleiben müssen. Der Antrag hängt an einem Support-Fall, wird also von Hand geprüft, üblicherweise innerhalb eines bis zwei Werktagen. Zu tun ist nichts, außer den Status abzufragen; falls im AWS-Support-Center eine Rückfrage auftaucht, muss Javi sie beantworten, sonst bleibt der Fall liegen.
 
   Status abfragen:
@@ -79,9 +82,8 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
 
 ## Nächster Schritt
 
-1. **SNS-Mail bestätigen.** Einziger Punkt, der noch an Javi hängt und sofort erledigt werden kann. Bis dahin sind alle drei Alarme stumm.
-2. **Auf die Kontingentfreigabe warten**, dann den vorbereiteten Redeploy mit `-ReservedConcurrency 5` fahren (Befehl steht unter Blockiert).
-3. **Danach das Widget** in `kettenki-website` bauen, gegen `API.md`. Die API ist live und der Vertrag ist verifiziert, das ist keine Vorarbeit mehr, die hier passieren muss.
+1. **Auf die Kontingentfreigabe warten**, dann den vorbereiteten Redeploy mit `-ReservedConcurrency 5` fahren (Befehl steht unter Blockiert). Das ist der einzige offene Punkt an der Infrastruktur, und er hängt an AWS, nicht an uns.
+2. **Das Widget** in `kettenki-website` bauen, gegen `API.md`. Die API ist live, die Alarme sind scharf, der Vertrag ist verifiziert: hier muss dafür nichts mehr vorbereitet werden.
 
 ## Offen (noch nicht begonnen)
 
