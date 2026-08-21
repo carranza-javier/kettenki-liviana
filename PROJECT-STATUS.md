@@ -1,6 +1,6 @@
 # Liviana — Project Status
 
-_Letzte Aktualisierung: 2026-08-21 (SNS bestätigt, Alarme scharf; auf GitHub gepusht; Kontingenterhöhung für Lambda im Support-Fall)_
+_Letzte Aktualisierung: 2026-08-21 (Sitzungsende: SNS bestätigt und Alarme scharf, Repo auf GitHub, Lambda-Kontingent im Support-Fall, Budget auf 10 USD angehoben)_
 
 > **Hinweis:** Dieses Dokument wird laufend aktualisiert, sobald sich am Projektstand etwas ändert. Bei jedem Fortschritt (erledigt, blockiert, neu offen) hier nachführen, nicht nur in `DECISIONS.md`. Claude pflegt es in jeder Sitzung selbstständig nach, ohne dass Javi danach fragen muss.
 
@@ -54,6 +54,8 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
 
   Am Rande, damit es beim nächsten Nachschauen nicht beunruhigt: `ConfirmationWasAuthenticated` steht auf `false`. Das heißt nur, dass per Klick auf den Link in der Mail bestätigt wurde und nicht über einen signierten API-Aufruf. Für ein E-Mail-Abo ist das der Normalfall, nicht ein halb fertiger Zustand.
 
+- [x] **Budget von 5 auf 10 USD angehoben** (Javi, von Hand in der Konsole). 5 USD waren zu knapp, weil im selben Konto noch anderes läuft: der Ist-Wert lag beim Nachschauen schon bei 5.97 USD, die 80-Prozent-Schwelle war also dauerhaft gerissen und hätte täglich gemeldet.
+
 ## Blockiert — wartet auf Input
 
 - **Kontingenterhöhung für Lambda, Status `CASE_OPENED`.** Solange AWS den Antrag nicht bewilligt hat, bleibt das Konto bei 10 gleichzeitigen Ausführungen und **jede** Reservierung wird abgelehnt, weil mindestens 10 unreserviert bleiben müssen. Der Antrag hängt an einem Support-Fall, wird also von Hand geprüft, üblicherweise innerhalb eines bis zwei Werktagen. Zu tun ist nichts, außer den Status abzufragen; falls im AWS-Support-Center eine Rückfrage auftaucht, muss Javi sie beantworten, sonst bleibt der Fall liegen.
@@ -74,7 +76,7 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
     -AlertEmail info@kettenki.com `
     -AllowedOrigin https://kettenki.com `
     -Region eu-central-1 `
-    -MonthlyBudgetUsd 5 `
+    -MonthlyBudgetUsd 10 `
     -ReservedConcurrency 5
   ```
 
@@ -117,6 +119,8 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
 - **Keine Gedankenstriche im Copy.** Gleiche Stilregel wie im Website-Repo, gilt auch für Texte im Inhaltsdokument.
 - **Keine Aussagen über aktive Produktion oder tägliche Nutzung von Bambera** — auch nicht im Prompt oder im Inhaltsdokument. Testdauer sind drei Monate.
 - **Reserved Concurrency ist zurzeit aus, nicht aus Überzeugung, sondern weil das Konto es verbietet.** Das Lambda-Kontingent für gleichzeitige Ausführungen steht auf 10, dem Wert für noch nicht hochgestufte Konten; AWS verlangt mindestens 10 unreservierte, also ist jede Reservierung unmöglich. Der Deploy scheiterte daran ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]"). Praktisch wirkt das Kontingent selbst wie eine Obergrenze von 10, nur kontoweit statt pro Funktion: ein Amoklauf in Liviana könnte also andere Lambdas im selben Konto aushungern, statt nur sich selbst zu drosseln. Nach der Kontingenterhöhung mit `-ReservedConcurrency 5` neu deployen.
+- **Das Budget heißt `liviana-monthly`, misst aber das ganze Konto.** Es hat keine `CostFilters`, also zählt es jeden Dollar in `964907375727` mit, nicht nur Liviana. Das ist der eigentliche Grund, warum 5 USD täglich Alarm schlugen: der Betrag stammt nicht aus diesem Projekt. Wer es später sauber haben will, hängt einen Kostenfilter an die Budget-Ressource in `infra/template.yaml` (nach Tag oder nach Service) und gibt den Stack-Ressourcen ein gemeinsames Tag. Bis dahin gilt: die 10 USD sind eine Kontogrenze, keine Liviana-Grenze. Der Tagesdeckel von 500 Aufrufen ist das, was Liviana selbst begrenzt.
+- **Achtung Drift: das Budget gehört CloudFormation.** Die Anhebung auf 10 USD wurde von Hand gemacht, der Stack kennt sie nicht. **Der nächste Deploy setzt sie auf den Wert des Parameters zurück**, deshalb trägt der vorbereitete Redeploy-Befehl unter Blockiert jetzt `-MonthlyBudgetUsd 10`. Gleiches gilt für jede andere Änderung, die in der Konsole an Stack-Ressourcen gemacht wird: entweder im Template nachziehen oder beim Deploy mitgeben, sonst ist sie beim nächsten Lauf weg.
 - **Die Kontingenterhöhung wurde per CLI beantragt, nicht über die Konsole.** `aws service-quotas request-service-quota-increase` erzeugt denselben Antrag und liefert eine Request-ID, die sich später skriptbar abfragen lässt, statt in einem Support-Fall nachschauen zu müssen. Beantragt wurde direkt 1000, der Normalwert eines regulären Kontos, statt einer knapp bemessenen Zwischenstufe: der Antrag kostet nichts und ein zweiter Anlauf in drei Monaten wäre reine Wiederholung.
 - **Der Mock kann Modellverhalten nicht prüfen, nur den Ablauf.** Alle vier Prompt-Defekte dieser Sitzung waren mit 56 grünen Tests unsichtbar und fielen erst beim ersten echten Bedrock-Aufruf auf. Für künftige Prompt-Änderungen gilt deshalb: nach dem Deploy mindestens einmal in DE, EN und ES gegenprüfen, mit einer Preisfrage, einer Frage nach technischen Interna und einer nach Javi als Kandidat.
 - **Ein Deploy ist billig, ein falscher Default teuer.** `AllowedOrigin` hat deshalb bewusst keinen Vorgabewert mehr. Lieber ein abgebrochener Deploy mit fehlendem Pflichtparameter als ein stiller `*` in Produktion.
@@ -125,8 +129,9 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
 ## Offene Fragen an Javi
 
 - ~~Region und Modell-ID?~~ **Entschieden: `eu-central-1` und `eu.anthropic.claude-haiku-4-5-20251001-v1:0`** (2026-08-21), in der Region als ACTIVE bestätigt und live im Einsatz.
-- ~~Monatsbudget?~~ **Entschieden: 5 USD** (2026-08-21), Alarm bei 80 % Ist und 100 % Prognose an `info@kettenki.com`.
+- ~~Monatsbudget?~~ **Entschieden: zuerst 5 USD, am selben Tag auf 10 USD korrigiert** (2026-08-21), Alarm bei 80 % Ist und 100 % Prognose an `info@kettenki.com`.
 - ~~Öffentlich oder privat?~~ **Entschieden: öffentlich** (2026-08-21), wie `kettenki-bambera`.
+- ~~Monatsbudget 5 USD?~~ **Korrigiert auf 10 USD** (2026-08-21), siehe Entscheidungen: 5 war für ein geteiltes Konto zu knapp.
 - **Tagesdeckel 500 Aufrufe**: unverändert übernommen. Ob er für den echten Besucherstrom von kettenki.com großzügig oder knapp ist, weiß erst der erste Monat. Der Zähler steht in `liviana-limits` unter `BUDGET#<Datum>` und ist mit einem `scan` ablesbar.
 - **Soll die Portfolio-Fiche `liviana.html` in `kettenki-website` jetzt einen Repo-Link bekommen?** Gleiche Frage, die dort schon für Bambera offen war.
 
