@@ -48,12 +48,12 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
 - [x] **58 Tests grün**, inklusive der neuen Zusicherungen für die vier Fixes.
 
 - [x] **Repo ist auf GitHub**, öffentlich unter `https://github.com/carranza-javier/kettenki-liviana`. Drei Commits auf `main`, `origin/main` verfolgt. Vor dem Push noch einmal die vollständige Historie auf Zugangsdaten geprüft: sauber.
-- [x] **Kontingenterhöhung für Lambda beantragt**: `Concurrent executions` (Quota-Code `L-B99A9384`) in `eu-central-1` von 10 auf 1000, per `aws service-quotas request-service-quota-increase`. Request-ID `554e9c57d7d24d59b0a8092fdb44dc81sDpYzldS`, **Status PENDING**. Das effektive Kontingent steht weiterhin auf 10, deshalb konnte Reserved Concurrency in dieser Sitzung nicht nachgerüstet werden, siehe Blockiert.
+- [x] **Kontingenterhöhung für Lambda beantragt**: `Concurrent executions` (Quota-Code `L-B99A9384`) in `eu-central-1` von 10 auf 1000, per `aws service-quotas request-service-quota-increase`. Request-ID `554e9c57d7d24d59b0a8092fdb44dc81sDpYzldS`. Der Status wanderte innerhalb weniger Minuten von `PENDING` auf **`CASE_OPENED`**: AWS hat dafür einen Support-Fall geöffnet, die Freigabe läuft also über einen Menschen und nicht automatisch. Das effektive Kontingent steht weiterhin auf 10, deshalb konnte Reserved Concurrency in dieser Sitzung nicht nachgerüstet werden, siehe Blockiert.
 
 ## Blockiert — wartet auf Input
 
 - **SNS-Bestätigung durch Javi.** Das Topic `liviana-alerts` hat zwei ausstehende Bestätigungen an `info@kettenki.com` (eine stammt aus dem fehlgeschlagenen ersten Deploy, CloudFormation legte beim Update eine zweite an). **Bis Javi eine davon per Mail bestätigt, sind alle Alarme stumm** — Circuit Breaker offen, Funktionsfehler, Throttles. Die zweite verfällt nach drei Tagen von selbst.
-- **Kontingenterhöhung für Lambda, Status PENDING.** Solange AWS den Antrag nicht bewilligt hat, bleibt das Konto bei 10 gleichzeitigen Ausführungen und **jede** Reservierung wird abgelehnt, weil mindestens 10 unreserviert bleiben müssen. Es gibt hier nichts zu tun außer zu warten; AWS bearbeitet solche Anträge üblicherweise innerhalb weniger Stunden bis zwei Werktagen, manchmal automatisch, manchmal über einen Support-Fall.
+- **Kontingenterhöhung für Lambda, Status `CASE_OPENED`.** Solange AWS den Antrag nicht bewilligt hat, bleibt das Konto bei 10 gleichzeitigen Ausführungen und **jede** Reservierung wird abgelehnt, weil mindestens 10 unreserviert bleiben müssen. Der Antrag hängt an einem Support-Fall, wird also von Hand geprüft, üblicherweise innerhalb eines bis zwei Werktagen. Zu tun ist nichts, außer den Status abzufragen; falls im AWS-Support-Center eine Rückfrage auftaucht, muss Javi sie beantworten, sonst bleibt der Fall liegen.
 
   Status abfragen:
 
