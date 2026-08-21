@@ -52,7 +52,7 @@ infra/template.yaml       the whole stack, plain CloudFormation
 scripts/deploy.ps1|.sh    package, deploy, upload content
 tools/chat.py             terminal client
 tools/smoke.py            verifies a deployed API against API.md
-tests/                    56 tests, no AWS needed
+tests/                    58 tests, no AWS needed
 ```
 
 ---
@@ -158,8 +158,15 @@ provides, so packaging is a zip of `src/liviana`.
 ./scripts/deploy.ps1 `
   -ContentBucketName kettenki-liviana-content `
   -AlertEmail info@kettenki.com `
-  -AllowedOrigin https://kettenki.com
+  -AllowedOrigin https://kettenki.com `
+  -MonthlyBudgetUsd 5 `
+  -ReservedConcurrency 0
 ```
+
+> `-ReservedConcurrency 0` leaves the reservation unset. It is needed on an
+> account whose Lambda "Concurrent executions" quota is still the
+> unverified-account default of 10, because AWS refuses any reservation that
+> drops unreserved capacity below 10. Raise that quota, then redeploy with `5`.
 
 or, on bash:
 
@@ -179,8 +186,9 @@ Useful overrides: `-Region`, `-ModelId`, `-RateLimitPerMinute`,
 `-DailyInvocationLimit`, `-ReservedConcurrency`, `-MonthlyBudgetUsd`,
 `-StackName`, `-AwsProfile`.
 
-> Leave `-AllowedOrigin` at `*` only while testing. In production it is what
-> stops an arbitrary page on the internet from spending your daily budget.
+> `-AllowedOrigin` is mandatory and has no default. It is the one parameter
+> where a convenient `*` would quietly let any page on the internet spend the
+> daily budget, so the deploy refuses to guess it.
 
 ### Verify
 
@@ -191,6 +199,14 @@ python tools/smoke.py https://<api-id>.execute-api.eu-central-1.amazonaws.com
 It checks health, a first answer, that the follow-up sees the previous turn,
 session issuing, and the 400 cases. `--flood 25` also exercises the rate limit;
 each message costs one real invocation, so use it deliberately.
+
+**The smoke suite proves the plumbing, not the answers.** The mock model is a
+keyword matcher, so nothing local can tell you whether the model keeps to four
+sentences, refuses to invent a price, or answers in the visitor's language.
+After any change to `prompt.py` or to the content document, ask the live API at
+least one question in each supported language, plus a price question, a
+"what's inside Bambera" question and one about the person behind the company.
+Four real defects were found exactly that way, with the whole test suite green.
 
 ### Changing the content afterwards
 
@@ -212,7 +228,7 @@ away from being rolled back.
 
 | Layer                     | Where                       | Default        | Stops                                                     |
 | ------------------------- | --------------------------- | -------------- | --------------------------------------------------------- |
-| Reserved concurrency      | Lambda                      | 5              | Runaway parallelism, and isolates the account pool        |
+| Reserved concurrency      | Lambda                      | 5, or 0 to skip | Runaway parallelism, and isolates the account pool        |
 | API Gateway throttling    | stage route settings        | 10 rps, 20 burst | Floods from any number of sessions, before Lambda runs    |
 | Rate limit per session    | DynamoDB conditional update | 20 / minute    | One visitor hammering the widget                          |
 | Daily circuit breaker     | DynamoDB conditional update | 500 / day      | The total spend of one day, whatever the traffic          |
