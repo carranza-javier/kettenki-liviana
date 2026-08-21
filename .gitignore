@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local mock state, regenerated on every run.
+.liviana-state.json
+
+# Deployment artifacts.
+build/
+
+# Real environment values. .env.example is the one that is committed.
+.env

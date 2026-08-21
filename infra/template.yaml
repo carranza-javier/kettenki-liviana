@@ -1,0 +1,467 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Liviana - public website assistant. HTTP API + Lambda + Bedrock + DynamoDB + S3,
+  with the four cost protections wired in: reserved concurrency, API throttling,
+  a per-session rate limit, a daily invocation circuit breaker, and a budget alarm.
+  Plain CloudFormation on purpose: the function has no dependencies beyond the
+  boto3 already present in the Lambda runtime, so no build step and no SAM CLI
+  are needed to deploy it.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: liviana
+    AllowedPattern: "[a-z0-9-]{3,32}"
+    Description: Prefix for every resource name in this stack.
+
+  ContentBucketName:
+    Type: String
+    Description: >
+      Globally unique S3 bucket name for the content document. Created by this
+      stack; the document itself is uploaded by scripts/deploy.
+    AllowedPattern: "[a-z0-9.-]{3,63}"
+
+  ContentKey:
+    Type: String
+    Default: content.json
+    Description: Object key of the content document inside the bucket.
+
+  AllowedOrigin:
+    Type: String
+    Default: "*"
+    Description: >
+      Origin allowed to call the API, e.g. https://kettenki.com. Set this to the
+      real site before going live; "*" lets any page on the internet spend the
+      daily budget.
+
+  ModelId:
+    Type: String
+    Default: eu.anthropic.claude-haiku-4-5-20251001-v1:0
+    Description: >
+      Bedrock model or inference-profile id. Verify it exists in your region with
+      "aws bedrock list-inference-profiles" before deploying.
+
+  LambdaCodeBucket:
+    Type: String
+    Description: S3 bucket holding the packaged function zip.
+
+  LambdaCodeKey:
+    Type: String
+    Description: S3 key of the packaged function zip.
+
+  # --- Model behaviour ---
+  Temperature:
+    Type: Number
+    Default: 0.2
+    MinValue: 0
+    MaxValue: 1
+  MaxTokens:
+    Type: Number
+    Default: 400
+    MinValue: 64
+    MaxValue: 4096
+  MaxMessageChars:
+    Type: Number
+    Default: 1000
+    MinValue: 100
+    MaxValue: 8000
+
+  # --- Conversation memory ---
+  HistoryPairs:
+    Type: Number
+    Default: 4
+    MinValue: 0
+    MaxValue: 10
+    Description: Message pairs replayed to the model. Each pair adds input cost.
+  ConversationTtlHours:
+    Type: Number
+    Default: 24
+    MinValue: 1
+    MaxValue: 720
+
+  # --- Cost protection ---
+  RateLimitPerMinute:
+    Type: Number
+    Default: 20
+    MinValue: 1
+    Description: Messages one session may send per minute.
+  DailyInvocationLimit:
+    Type: Number
+    Default: 500
+    MinValue: 1
+    Description: Model invocations per day across all visitors. The circuit breaker.
+  ReservedConcurrency:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    Description: >
+      Hard ceiling on parallel executions. Also isolates this function from the
+      account concurrency pool, so a runaway here cannot starve other Lambdas.
+  ApiRateLimit:
+    Type: Number
+    Default: 10
+    Description: API Gateway steady-state requests per second across all callers.
+  ApiBurstLimit:
+    Type: Number
+    Default: 20
+    Description: API Gateway burst capacity.
+
+  # --- Observability ---
+  AlertEmail:
+    Type: String
+    Description: Address that receives budget and alarm notifications. Must be confirmed by email.
+    AllowedPattern: ".+@.+"
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 10
+    MinValue: 1
+    Description: Monthly AWS budget for this project; alerts at 80% actual and 100% forecast.
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # Content
+  # ---------------------------------------------------------------------------
+  ContentBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref ContentBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        # Content edits are the most likely thing to go wrong at 2am; versioning
+        # makes rolling one back a one-liner.
+        Status: Enabled
+
+  # ---------------------------------------------------------------------------
+  # Conversation memory + counters
+  # ---------------------------------------------------------------------------
+  # One item per session holding the sliding window of the conversation.
+  ConversationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-conversations"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sessionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sessionId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  # One item per counter window: RATE#<session-or-ip>#<minute> and BUDGET#<day>.
+  # Separate from the conversations so a wipe of one never touches the other.
+  LimitsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-limits"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  # ---------------------------------------------------------------------------
+  # Function
+  # ---------------------------------------------------------------------------
+  ChatFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-chat"
+      RetentionInDays: !Ref LogRetentionDays
+
+  ChatFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: liviana-runtime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Logs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${ChatFunctionLogGroup.Arn}:*"
+              - Sid: ConversationMemory
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !GetAtt ConversationTable.Arn
+              - Sid: AbuseCounters
+                Effect: Allow
+                Action:
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt LimitsTable.Arn
+              - Sid: ReadContentDocument
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${ContentBucketName}/*"
+              - Sid: InvokeModel
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource:
+                  # A cross-region inference profile is invoked through its own
+                  # ARN but dispatches to the foundation model in whichever
+                  # region has capacity, so both have to be allowed.
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${ModelId}"
+                  - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/anthropic.*"
+
+  ChatFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ChatFunctionLogGroup
+    Properties:
+      FunctionName: !Sub "${ProjectName}-chat"
+      Runtime: python3.13
+      Handler: liviana.app.handler
+      Role: !GetAtt ChatFunctionRole.Arn
+      MemorySize: 512
+      Timeout: 25
+      ReservedConcurrentExecutions: !Ref ReservedConcurrency
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
+      Environment:
+        Variables:
+          LIVIANA_BACKEND: aws
+          LIVIANA_CONTENT_BUCKET: !Ref ContentBucketName
+          LIVIANA_CONTENT_KEY: !Ref ContentKey
+          LIVIANA_CONVERSATIONS_TABLE: !Ref ConversationTable
+          LIVIANA_LIMITS_TABLE: !Ref LimitsTable
+          LIVIANA_MODEL_ID: !Ref ModelId
+          LIVIANA_TEMPERATURE: !Ref Temperature
+          LIVIANA_MAX_TOKENS: !Ref MaxTokens
+          LIVIANA_MAX_MESSAGE_CHARS: !Ref MaxMessageChars
+          LIVIANA_HISTORY_PAIRS: !Ref HistoryPairs
+          LIVIANA_CONVERSATION_TTL_HOURS: !Ref ConversationTtlHours
+          LIVIANA_RATE_LIMIT_PER_MINUTE: !Ref RateLimitPerMinute
+          LIVIANA_DAILY_INVOCATION_LIMIT: !Ref DailyInvocationLimit
+          LIVIANA_ALLOWED_ORIGIN: !Ref AllowedOrigin
+          LIVIANA_LOG_LEVEL: INFO
+
+  # ---------------------------------------------------------------------------
+  # HTTP API
+  # ---------------------------------------------------------------------------
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${ProjectName}-api"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        # Handled at the API so a preflight never costs a Lambda invocation.
+        AllowOrigins:
+          - !Ref AllowedOrigin
+        AllowMethods:
+          - POST
+          - GET
+          - OPTIONS
+        AllowHeaders:
+          - content-type
+        MaxAge: 86400
+
+  ChatIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ChatFunction.Arn
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 26000
+
+  ChatRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /chat"
+      Target: !Sub "integrations/${ChatIntegration}"
+
+  HealthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "GET /health"
+      Target: !Sub "integrations/${ChatIntegration}"
+
+  ApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apigateway/${ProjectName}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings:
+        # Second line of defence: caps total requests per second regardless of
+        # how many distinct sessions the caller invents.
+        ThrottlingRateLimit: !Ref ApiRateLimit
+        ThrottlingBurstLimit: !Ref ApiBurstLimit
+      AccessLogSettings:
+        DestinationArn: !GetAtt ApiAccessLogGroup.Arn
+        Format: >-
+          {"requestId":"$context.requestId","ip":"$context.identity.sourceIp","method":"$context.httpMethod","path":"$context.path","status":"$context.status","latency":"$context.responseLatency","integrationStatus":"$context.integrationStatus"}
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ChatFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+  # ---------------------------------------------------------------------------
+  # Alerting
+  # ---------------------------------------------------------------------------
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectName}-alerts"
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+
+  CircuitBreakerMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref ChatFunctionLogGroup
+      FilterPattern: '"Circuit breaker open"'
+      MetricTransformations:
+        - MetricNamespace: !Ref ProjectName
+          MetricName: CircuitBreakerOpen
+          MetricValue: "1"
+          DefaultValue: 0
+
+  CircuitBreakerAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-circuit-breaker-open"
+      AlarmDescription: >
+        The daily invocation limit was reached and visitors are being turned
+        away. Either traffic grew or somebody is abusing the widget.
+      Namespace: !Ref ProjectName
+      MetricName: CircuitBreakerOpen
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  FunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-function-errors"
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ChatFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  FunctionThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-function-throttles"
+      AlarmDescription: Reserved concurrency is saturated; visitors are getting errors.
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ChatFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  ProjectBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "${ProjectName}-monthly"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetUsd
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+
+Outputs:
+  ChatEndpoint:
+    Description: POST here from the widget.
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/chat"
+  HealthEndpoint:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/health"
+  ContentBucket:
+    Description: Upload the content document here.
+    Value: !Ref ContentBucketName
+  ConversationTableName:
+    Value: !Ref ConversationTable
+  LimitsTableName:
+    Value: !Ref LimitsTable
+  FunctionName:
+    Value: !Ref ChatFunction

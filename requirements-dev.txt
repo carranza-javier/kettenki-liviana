@@ -1,0 +1,5 @@
+# The Lambda itself needs nothing beyond the boto3 that the Python runtime
+# already ships, which is why there is no requirements.txt and no build step.
+# These are only for running the tests and the terminal client.
+pytest>=8.0
+boto3>=1.34
