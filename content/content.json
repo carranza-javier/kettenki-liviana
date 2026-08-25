@@ -4,7 +4,7 @@
     "assistant_name": "Liviana",
     "organisation": "KettenKI",
     "website": "kettenki.com",
-    "voice": "Du sprichst als offizielle Assistentin der Firma KettenKI. Du bist freundlich, knapp und sachlich. Du sprichst niemals als Privatperson. Du duzt die Besucher durchgehend (du, dein, dir), wie der Rest der Website, und wechselst nie innerhalb eines Gesprächs zum Sie. In anderen Sprachen entsprechend: 'you' im Englischen, 'tú' im Spanischen, nie 'usted'.",
+    "voice": "Du sprichst als offizielle Assistentin der Firma KettenKI. Sprich wie ein hilfsbereiter Mensch, der sich auskennt: normale Alltagssprache, kurze Sätze, keine Werbefloskeln und keine Adjektive, die nichts sagen. Kein Verkäuferton. Du bist nicht der Prospekt, du bist die Person am anderen Ende. Du sprichst niemals als Privatperson. Du duzt die Besucher durchgehend (du, dein, dir), wie der Rest der Website, und wechselst nie innerhalb eines Gesprächs zum Sie. In anderen Sprachen entsprechend: 'you' im Englischen, 'tú' im Spanischen, nie 'usted'.",
     "scope_note": "Du bist selbst LIVIANA und wirst auf dieser Seite live vorgeführt: Produkt und Demo zugleich. Du bist nicht BAMBERA und nicht FANDANGO. Über die anderen Lösungen sprichst du auf kommerzieller Ebene, also was sie leisten und für wen, nie über deren technische Interna."
   },
   "language": {
@@ -18,11 +18,11 @@
   "cta": {
     "email": "info@kettenki.com",
     "linkedin": "linkedin.com/company/kettenki",
-    "contact_page": "https://kettenki.com/contact.html",
+    "contact_page": "https://kettenki.com/contact",
     "text": {
-      "de": "Schreib uns an info@kettenki.com oder über kettenki.com/contact.html.",
-      "en": "Write to info@kettenki.com or use kettenki.com/contact.html.",
-      "es": "Escríbenos a info@kettenki.com o desde kettenki.com/contact.html."
+      "de": "Schreib uns an info@kettenki.com oder über kettenki.com/contact.",
+      "en": "Write to info@kettenki.com or use kettenki.com/contact.",
+      "es": "Escríbenos a info@kettenki.com o desde kettenki.com/contact."
     }
   },
   "sections": [
@@ -30,8 +30,8 @@
       "id": "unternehmen",
       "label": "Über KettenKI",
       "data": {
-        "was_ist_kettenki": "KettenKI baut KI-Lösungen in Cloud-Architekturen für Schweizer Unternehmen. Der Name steht für eine robuste, moderne Kette zwischen Menschen und künstlicher Intelligenz.",
-        "sitz": "Bern, Schweiz",
+        "was_ist_kettenki": "KettenKI baut KI-Chatbots, Websites und Apps nach Mass für kleine und mittlere Unternehmen in der ganzen Schweiz. Der Name steht für eine robuste, moderne Kette zwischen Menschen und künstlicher Intelligenz.",
+        "sitz": "Bern, Schweiz. Gearbeitet wird für Kundschaft in der ganzen Schweiz.",
         "philosophie": [
           "Testen vor dem Kaufen: die Prototypen sind kostenlos testbar.",
           "Einfachheit, Qualität und langfristiges Denken statt schneller, oberflächlicher Lösungen.",
@@ -43,12 +43,19 @@
           "Kostenloses Testen ist der normale Einstieg.",
           "Wenn ein Prototyp im Betrieb überzeugt, wird die Weiterentwicklung gemeinsam getragen (Mitfinanzierung beim Skalieren)."
         ],
-        "hinweis_prototypen": "Alle drei Lösungen sind ausdrücklich als Prototypen positioniert, nicht als fertige Produkte mit Support-Vertrag."
+        "hinweis_prototypen": "Der Prototypen-Hinweis gilt ausschliesslich für BAMBERA, LIVIANA und FANDANGO. Websites und Apps nach Mass sind davon nicht betroffen und dürfen nie als Prototyp ohne Garantie beschrieben werden.",
+        "ablauf": [
+          "Du sagst mir, was du brauchst.",
+          "Ich baue eine erste funktionierende Version.",
+          "Gefällt sie dir, sprechen wir über den Preis.",
+          "Wenn nicht, schuldest du nichts."
+        ],
+        "zwei_arten_von_arbeit": "Das Angebot hat zwei Teile, die nicht verwechselt werden dürfen. Die drei KI-Lösungen (BAMBERA, LIVIANA, FANDANGO) sind experimentelle Prototypen und kostenlos testbar, ohne Garantie und ohne SLA. Websites und Apps nach Mass sind normale Auftragsarbeit: kein Prototyp und kein Testzugang, sondern ein Projekt mit klarem Umfang, das nach dem Ablauf oben läuft."
       }
     },
     {
       "id": "produkte",
-      "label": "Die drei Lösungen",
+      "label": "Was KettenKI anbietet",
       "data": {
         "bambera": {
           "name": "BAMBERA",
@@ -67,7 +74,8 @@
             "Industrie: Maschine zeigt Fehler E347, was tun? BAMBERA gibt die hinterlegten Schritte aus dem Wartungshandbuch."
           ],
           "status": "Eigener Prototyp, drei Monate mit dem Team einer Kaffeebar im Alltag getestet.",
-          "seite": "https://kettenki.com/bambera.html"
+          "seite": "https://kettenki.com/bambera",
+          "art": "Experimenteller Prototyp: kostenlos testbar, funktional und getestet, aber ohne Garantie und ohne SLA."
         },
         "liviana": {
           "name": "LIVIANA",
@@ -83,7 +91,8 @@
             "Kann ich eine Klasse vor der Anmeldung ausprobieren? LIVIANA antwortet aus den hinterlegten Informationen des Studios."
           ],
           "selbstbezug": "Der Chatbot auf kettenki.com ist LIVIANA selbst: gleichzeitig Produkt und Live-Demo.",
-          "seite": "https://kettenki.com/liviana.html"
+          "seite": "https://kettenki.com/liviana",
+          "art": "Experimenteller Prototyp: kostenlos testbar, funktional und getestet, aber ohne Garantie und ohne SLA."
         },
         "fandango": {
           "name": "FANDANGO",
@@ -100,7 +109,41 @@
             "Logistik: aus einer Meldung über eine verspätete Sendung mit möglicher Konventionalstrafe wird urgency=high, risk_score=8.5, category=delay.",
             "Medizin: aus einer freien Anamnese-Notiz werden strukturierte Felder wie Alter, Hauptsymptom, Vorgeschichte, Dringlichkeit und Fachrichtung."
           ],
-          "seite": "https://kettenki.com/fandango.html"
+          "seite": "https://kettenki.com/fandango",
+          "art": "Experimenteller Prototyp: kostenlos testbar, funktional und getestet, aber ohne Garantie und ohne SLA."
+        },
+        "websites": {
+          "name": "Websites",
+          "claim": "Schnell, professionell und individuell für dein Unternehmen.",
+          "beschreibung": "Eine Website, die zum Betrieb passt: responsive, schnell und mit den SEO-Grundlagen für Google. Gebaut nach deinen Anforderungen, nicht aus einem Baukasten zusammengeklickt.",
+          "vorteile": [
+            "Funktioniert auf dem Handy genauso wie am Rechner",
+            "Kurze Ladezeiten",
+            "Die SEO-Grundlagen, damit Google die Seite findet",
+            "Mehrsprachig, wenn der Betrieb das braucht"
+          ],
+          "fuer_wen": "KMU ohne eigene Website, und Betriebe, deren Seite veraltet ist oder auf dem Handy nicht funktioniert.",
+          "beispiele": [
+            "Ein Restaurant will Karte, Öffnungszeiten und Reservierung auf einer Seite, die auf dem Handy sofort lädt."
+          ],
+          "art": "Auftragsarbeit, kein Prototyp. Es gilt der Ablauf: erst eine erste funktionierende Version, dann der Preis.",
+          "seite": "https://kettenki.com/services#custom-development"
+        },
+        "apps": {
+          "name": "Apps nach Mass",
+          "claim": "Werkzeuge für das, was dein Betrieb wirklich braucht.",
+          "beschreibung": "Eine Anwendung für einen Ablauf, den es so nur bei dir gibt, entwickelt nach deinen Anforderungen und mit klarem Umfang von Anfang an.",
+          "vorteile": [
+            "Genau der Ablauf, den der Betrieb wirklich hat, statt einer Standardsoftware, die fast passt",
+            "Klarer Umfang von Anfang an",
+            "Läuft im Browser, auch auf dem Handy"
+          ],
+          "fuer_wen": "Betriebe mit einem eigenen Ablauf, für den es keine passende Standardsoftware gibt, oder die ihn heute mit Excel und Zetteln abwickeln.",
+          "beispiele": [
+            "Ein Handwerksbetrieb erfasst Rapporte heute auf Papier und will sie direkt auf der Baustelle eintippen und auswerten."
+          ],
+          "art": "Auftragsarbeit, kein Prototyp. Es gilt der Ablauf: erst eine erste funktionierende Version, dann der Preis.",
+          "seite": "https://kettenki.com/services#custom-development"
         }
       }
     },
@@ -110,8 +153,8 @@
       "data": {
         "email": "info@kettenki.com",
         "linkedin": "linkedin.com/company/kettenki",
-        "kontaktseite": "https://kettenki.com/contact.html",
-        "wie_es_weitergeht": "Wer eine der Lösungen testen möchte, meldet sich per E-Mail oder über die Kontaktseite. Danach wird gemeinsam geschaut, welche Daten für einen Test nötig sind.",
+        "kontaktseite": "https://kettenki.com/contact",
+        "wie_es_weitergeht": "Wer eine der KI-Lösungen testen möchte oder eine Website oder App braucht, meldet sich per E-Mail oder über die Kontaktseite. Danach wird gemeinsam geschaut, was für den ersten Schritt nötig ist.",
         "sprachen": "Anfragen sind auf Deutsch, Englisch und Spanisch möglich."
       }
     }
@@ -119,9 +162,9 @@
   "pricing": {
     "public_prices": false,
     "statement": {
-      "de": "Für die Prototypen gibt es keine veröffentlichte Preisliste. Der Test ist kostenlos, alles Weitere wird individuell besprochen.",
-      "en": "There is no published price list for the prototypes. Testing is free, anything beyond that is agreed individually.",
-      "es": "No hay lista de precios publicada para los prototipos. La prueba es gratuita y lo demás se acuerda de forma individual."
+      "de": "Es gibt keine veröffentlichte Preisliste. Die KI-Prototypen sind kostenlos testbar. Bei Websites und Apps entsteht zuerst eine erste funktionierende Version, und über den Preis wird erst danach gesprochen.",
+      "en": "There is no published price list. The AI prototypes are free to test. For websites and apps a first working version comes first, and the price is only discussed after that.",
+      "es": "No hay lista de precios publicada. Los prototipos de IA se pueden probar gratis. En webs y apps primero se construye una primera versión que funciona, y del precio se habla después."
     }
   },
   "out_of_scope": {
