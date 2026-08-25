@@ -1,6 +1,6 @@
 # Liviana — Project Status
 
-_Letzte Aktualisierung: 2026-08-21 (Sitzungsende: SNS bestätigt und Alarme scharf, Repo auf GitHub, Lambda-Kontingent im Support-Fall, Budget auf 10 USD angehoben)_
+_Letzte Aktualisierung: 2026-08-25 (Wissensbasis kennt das ganze Angebot, Regeln gegen das vorschnelle Kontaktangebot, content.json in S3)_
 
 > **Hinweis:** Dieses Dokument wird laufend aktualisiert, sobald sich am Projektstand etwas ändert. Bei jedem Fortschritt (erledigt, blockiert, neu offen) hier nachführen, nicht nur in `DECISIONS.md`. Claude pflegt es in jeder Sitzung selbstständig nach, ohne dass Javi danach fragen muss.
 
@@ -55,6 +55,15 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
   Am Rande, damit es beim nächsten Nachschauen nicht beunruhigt: `ConfirmationWasAuthenticated` steht auf `false`. Das heißt nur, dass per Klick auf den Link in der Mail bestätigt wurde und nicht über einen signierten API-Aufruf. Für ein E-Mail-Abo ist das der Normalfall, nicht ein halb fertiger Zustand.
 
 - [x] **Budget von 5 auf 10 USD angehoben** (Javi, von Hand in der Konsole). 5 USD waren zu knapp, weil im selben Konto noch anderes läuft: der Ist-Wert lag beim Nachschauen schon bei 5.97 USD, die 80-Prozent-Schwelle war also dauerhaft gerissen und hätte täglich gemeldet.
+- [x] **Wissensbasis und Regeln auf das heutige Angebot gebracht** (2026-08-25). Ausgelöst durch zwei Beobachtungen von Javi im Betrieb: Liviana bietet zu schnell die E-Mail an, und sie klingt zu sehr nach Bot. Beim Nachsehen kam ein dritter, schwererer Punkt dazu.
+  - **Websites und Apps nach Mass fehlten komplett.** `sections.produkte` kannte nur BAMBERA, LIVIANA und FANDANGO. Die Website führt aber längst mit "KI-Chatbots, Websites und Apps", und `services.html` teilt das Angebot in zwei benannte Abschnitte. Zwei Drittel des Angebots existierten für Liviana also nicht, und sie konnte danach gar nicht gefragt werden.
+  - **Der gefährliche Teil daran**: `hinweis_prototypen` sagte "Alle drei Lösungen sind Prototypen ohne Garantie". Wären die neuen Einträge einfach danebengestellt worden, hätte Liviana einen bezahlten Website-Auftrag als Prototyp ohne Garantie beschrieben. Jeder Eintrag trägt jetzt ein eigenes `art`-Feld, und das neue `zwei_arten_von_arbeit` sagt die Trennung ausdrücklich: KI-Prototypen kostenlos testbar ohne SLA, Websites und Apps normale Auftragsarbeit. Neu ist ausserdem `ablauf` mit den vier Schritten ("Du sagst mir, was du brauchst" bis "Wenn nicht, schuldest du nichts"), die vorher nirgends in der Wissensbasis standen, obwohl sie das eigentliche Verkaufsargument sind.
+  - **Warum sie so schnell die E-Mail anbot**: Drei Regeln schickten zum Kontakt, und zwei davon feuerten praktisch immer. GROUNDING verwies bei **jeder** Wissenslücke dorthin, die Preisregel hängte ihn an, und CALL TO ACTION zählte "something you cannot answer" als Kaufabsicht. Zusammen bekam eine ganz normale Frage eine E-Mail-Adresse angehängt. Jetzt verweist GROUNDING nicht mehr reflexhaft, die Preisregel hängt nichts mehr an, und CALL TO ACTION verlangt ein echtes Signal (nach Kontakt fragen, nach Preis fragen, anfangen oder buchen wollen), **einmal pro Gespräch statt einmal pro Antwort**.
+  - **Zwei Regeln, die es vorher gar nicht gab**: `FIT BEFORE CATALOGUE` (die eine passende Lösung nennen und in einem Satz begründen, nie das Sortiment aufsagen, bei Unklarheit eine kurze Rückfrage stellen) und `NOT A BROCHURE` (schreiben wie ein Mensch, keine Adjektive ohne Information, und es ist ausdrücklich erlaubt zu sagen, dass etwas nicht passt). Der Bot-Ton kam aus `identity.voice`, wo "freundlich, knapp und sachlich" stand; das ist neu formuliert.
+  - **`pricing.statement` sprach nur von Prototypen** und passte damit nicht mehr, sobald jemand nach dem Preis einer Website fragt. Deckt jetzt beide Arten von Arbeit ab, in DE, EN und ES.
+  - **Kontakt-URLs ohne `.html`** (`cta.contact_page`, `kontakt.kontaktseite`, die `seite`-Felder der Produkte), weil die Website überall extensionslos verlinkt. Die beiden neuen Einträge zeigen auf `services#custom-development`.
+  - **Das Du ist jetzt konsistent.** `identity.voice` duzt seit jeher und begründet das mit "wie der Rest der Website". Das stimmte eine Zeit lang nicht mehr, weil die Website auf Sie umgestellt worden war; sie ist am selben Tag zurück aufs Du gegangen, damit passt die Begründung wieder.
+  - Verifiziert: JSON gültig, Prompt baut sauber (14 352 Zeichen), Regelblock gelesen und neu durchnummeriert (jetzt 10 Regeln), **58 Tests grün**. **`content.json` ist von Javi nach S3 geladen worden**, die Änderungen sind also im Betrieb. Wie sich die neuen Regeln am echten Modell verhalten, ist damit die offene Frage, siehe Nächster Schritt.
 
 ## Blockiert — wartet auf Input
 
@@ -85,7 +94,8 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
 ## Nächster Schritt
 
 1. **Auf die Kontingentfreigabe warten**, dann den vorbereiteten Redeploy mit `-ReservedConcurrency 5` fahren (Befehl steht unter Blockiert). Das ist der einzige offene Punkt an der Infrastruktur, und er hängt an AWS, nicht an uns.
-2. **Das Widget** in `kettenki-website` bauen, gegen `API.md`. Die API ist live, die Alarme sind scharf, der Vertrag ist verifiziert: hier muss dafür nichts mehr vorbereitet werden.
+2. **Die neuen Regeln am echten Modell beobachten.** `content.json` liegt seit dem 2026-08-25 in S3, die Änderungen sind also scharf. Zu prüfen ist genau das, was sich nur im Gespräch zeigt: Bietet sie den Kontakt jetzt seltener an, ohne unhöflich zu wirken? Nennt sie bei einer beschriebenen Not **eine** passende Lösung statt des Sortiments? Klingt sie weniger nach Prospekt? Wenn sie weiter zu früh zum Kontakt schickt, ist Regel 6 die Stellschraube; wenn sie zu trocken wird, `identity.voice`.
+3. **Das Widget ist gebaut und live** in `kettenki-website`, dieser Punkt ist erledigt.
 
 ## Offen (noch nicht begonnen)
 
