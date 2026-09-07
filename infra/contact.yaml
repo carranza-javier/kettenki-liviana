@@ -1,0 +1,175 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Kontaktformular von kettenki.com. HTTP API + Lambda + SES, sonst nichts.
+  Eigener Stack neben Liviana und nicht in deren Vorlage: Ein Fehler am
+  Kontaktformular soll den Chatbot nicht mitreissen, und umgekehrt. Reines
+  CloudFormation aus demselben Grund wie dort — die Funktion braucht nur das
+  boto3 aus der Laufzeit, also keinen Build-Schritt und kein SAM CLI.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: kettenki-contact
+    AllowedPattern: "[a-z0-9-]{3,32}"
+    Description: Prefix for every resource name in this stack.
+
+  AllowedOrigin:
+    Type: String
+    AllowedPattern: "https://.+|http://localhost(:[0-9]+)?"
+    Description: >
+      Origin allowed to call the API, e.g. https://kettenki.com. Deliberately
+      has no default, exactly as in the Liviana stack: "*" would let any page
+      on the internet post into the inbox, so it must be stated on every deploy.
+
+  SenderAddress:
+    Type: String
+    Description: >
+      From address. MUST be a verified SES identity in this region, otherwise
+      every send is rejected. Verifying one address is enough; a whole domain
+      is not required.
+
+  RecipientAddress:
+    Type: String
+    Description: >
+      Where enquiries arrive. While SES is in the sandbox this address must be
+      verified too — which is no restriction here, since it is our own inbox.
+
+  ApiRateLimit:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    Description: >
+      Sustained requests per second across the whole API. A contact form is
+      filled in by hand; anything above a trickle is a script, not a customer.
+
+  ApiBurstLimit:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    Description: Short burst allowance on top of the sustained rate.
+
+  ReservedConcurrency:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    Description: >
+      Hard ceiling on parallel executions. The throttle above is the first
+      brake; this is the one that holds even if the throttle is misconfigured.
+
+  ArtifactBucket:
+    Type: String
+    Description: S3 bucket holding the function zip, written by the deploy script.
+
+  ArtifactKey:
+    Type: String
+    Description: >
+      Key of the function zip. Content-addressed by the deploy script, which is
+      what makes CloudFormation notice that the code changed.
+
+Resources:
+  FunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: send-contact-mail
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Nur senden, und nur von dieser einen Identität aus. Ohne die
+              # Bedingung könnte die Funktion im Namen jeder verifizierten
+              # Adresse des Kontos schreiben.
+              - Effect: Allow
+                Action: ses:SendEmail
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    ses:FromAddress: !Ref SenderAddress
+
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-fn"
+      Runtime: python3.13
+      Handler: handler.handler
+      Role: !GetAtt FunctionRole.Arn
+      Timeout: 10
+      MemorySize: 256
+      ReservedConcurrentExecutions: !Ref ReservedConcurrency
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Environment:
+        Variables:
+          CONTACT_ALLOWED_ORIGIN: !Ref AllowedOrigin
+          CONTACT_SENDER: !Ref SenderAddress
+          CONTACT_RECIPIENT: !Ref RecipientAddress
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-fn"
+      # Die Logs enthalten keine Anfragetexte, nur Fehlercodes. Vier Wochen
+      # genügen, um einem Ausfall nachzugehen, und danach liegt nichts herum.
+      RetentionInDays: 30
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${ProjectName}-api"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref AllowedOrigin
+        AllowMethods: [POST, OPTIONS]
+        AllowHeaders: [Content-Type]
+        MaxAge: 86400
+
+  Integration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt Function.Arn
+      PayloadFormatVersion: "2.0"
+
+  Route:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /contact
+      Target: !Sub "integrations/${Integration}"
+
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingRateLimit: !Ref ApiRateLimit
+        ThrottlingBurstLimit: !Ref ApiBurstLimit
+
+  InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Function
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+Outputs:
+  Endpoint:
+    Description: >
+      Diese URL gehört in ENDPOINT in js/contact-form.js im Repo der Website.
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/contact"
+  FunctionName:
+    Value: !Ref Function
