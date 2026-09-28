@@ -53,6 +53,10 @@ scripts/deploy.ps1|.sh    package, deploy, upload content
 tools/chat.py             terminal client
 tools/smoke.py            verifies a deployed API against API.md
 tests/                    58 tests, no AWS needed
+
+infra/contact.yaml        separate stack: the kettenki.com contact form (HTTP API + Lambda + SES)
+src/contact/handler.py    its function
+scripts/deploy-contact.ps1
 ```
 
 ---
@@ -159,14 +163,17 @@ provides, so packaging is a zip of `src/liviana`.
   -ContentBucketName kettenki-liviana-content `
   -AlertEmail info@kettenki.com `
   -AllowedOrigin https://kettenki.com `
-  -MonthlyBudgetUsd 5 `
-  -ReservedConcurrency 0
+  -MonthlyBudgetUsd 10 `
+  -ReservedConcurrency 5
 ```
 
-> `-ReservedConcurrency 0` leaves the reservation unset. It is needed on an
+> `-ReservedConcurrency 0` leaves the reservation unset. Use it only on an
 > account whose Lambda "Concurrent executions" quota is still the
 > unverified-account default of 10, because AWS refuses any reservation that
-> drops unreserved capacity below 10. Raise that quota, then redeploy with `5`.
+> drops unreserved capacity below 10.
+>
+> Always pass `-MonthlyBudgetUsd`: the budget belongs to the stack, so a deploy
+> without it resets any value changed by hand in the console.
 
 or, on bash:
 

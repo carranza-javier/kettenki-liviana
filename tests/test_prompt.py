@@ -4,7 +4,9 @@ from pathlib import Path
 
 from liviana.prompt import build_system_prompt
 
-SRC = Path(__file__).resolve().parents[1] / "src"
+# Only the Liviana package: src/contact is the KettenKI contact form and is
+# client-specific by design.
+SRC = Path(__file__).resolve().parents[1] / "src" / "liviana"
 
 
 def test_prompt_carries_identity_and_knowledge(content):

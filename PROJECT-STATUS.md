@@ -1,6 +1,6 @@
 # Liviana — Project Status
 
-_Letzte Aktualisierung: 2026-08-25 (Wissensbasis kennt das ganze Angebot, Regeln gegen das vorschnelle Kontaktangebot, content.json in S3)_
+_Letzte Aktualisierung: 2026-09-28 (content.json auf die neue Positionierung umgeschrieben und in S3, Kontingent bewilligt, Kontaktformular-Stack dokumentiert)_
 
 > **Hinweis:** Dieses Dokument wird laufend aktualisiert, sobald sich am Projektstand etwas ändert. Bei jedem Fortschritt (erledigt, blockiert, neu offen) hier nachführen, nicht nur in `DECISIONS.md`. Claude pflegt es in jeder Sitzung selbstständig nach, ohne dass Javi danach fragen muss.
 
@@ -48,7 +48,7 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
 - [x] **58 Tests grün**, inklusive der neuen Zusicherungen für die vier Fixes.
 
 - [x] **Repo ist auf GitHub**, öffentlich unter `https://github.com/carranza-javier/kettenki-liviana`. Drei Commits auf `main`, `origin/main` verfolgt. Vor dem Push noch einmal die vollständige Historie auf Zugangsdaten geprüft: sauber.
-- [x] **Kontingenterhöhung für Lambda beantragt**: `Concurrent executions` (Quota-Code `L-B99A9384`) in `eu-central-1` von 10 auf 1000, per `aws service-quotas request-service-quota-increase`. Request-ID `554e9c57d7d24d59b0a8092fdb44dc81sDpYzldS`. Der Status wanderte innerhalb weniger Minuten von `PENDING` auf **`CASE_OPENED`**: AWS hat dafür einen Support-Fall geöffnet, die Freigabe läuft also über einen Menschen und nicht automatisch. Das effektive Kontingent steht weiterhin auf 10, deshalb konnte Reserved Concurrency in dieser Sitzung nicht nachgerüstet werden, siehe Blockiert.
+- [x] **Kontingenterhöhung für Lambda beantragt**: `Concurrent executions` (Quota-Code `L-B99A9384`) in `eu-central-1` von 10 auf 1000, per `aws service-quotas request-service-quota-increase`. Request-ID `554e9c57d7d24d59b0a8092fdb44dc81sDpYzldS`. Der Status wanderte innerhalb weniger Minuten von `PENDING` auf **`CASE_OPENED`**: AWS hat dafür einen Support-Fall geöffnet, die Freigabe läuft also über einen Menschen und nicht automatisch. Das effektive Kontingent steht weiterhin auf 10, deshalb konnte Reserved Concurrency in dieser Sitzung nicht nachgerüstet werden. Inzwischen bewilligt, siehe weiter unten.
 
 - [x] **SNS-Abo bestätigt, die Alarmkette ist damit scharf.** `PendingConfirmation: false` auf `arn:...:liviana-alerts:31f2e4ae`, die doppelte Anfrage aus dem fehlgeschlagenen ersten Deploy ist verschwunden. Alle drei Alarme (`liviana-circuit-breaker-open`, `liviana-function-errors`, `liviana-function-throttles`) stehen auf `OK`, `ActionsEnabled: true`, und zeigen auf das Topic. Die beiden Budget-Benachrichtigungen (80 % Ist, 100 % Prognose) gehen ohnehin direkt per Mail an `info@kettenki.com` und brauchen keine Bestätigung.
 
@@ -65,44 +65,48 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
   - **Das Du ist jetzt konsistent.** `identity.voice` duzt seit jeher und begründet das mit "wie der Rest der Website". Das stimmte eine Zeit lang nicht mehr, weil die Website auf Sie umgestellt worden war; sie ist am selben Tag zurück aufs Du gegangen, damit passt die Begründung wieder.
   - Verifiziert: JSON gültig, Prompt baut sauber (14 352 Zeichen), Regelblock gelesen und neu durchnummeriert (jetzt 10 Regeln), **58 Tests grün**. **`content.json` ist von Javi nach S3 geladen worden**, die Änderungen sind also im Betrieb. Wie sich die neuen Regeln am echten Modell verhalten, ist damit die offene Frage, siehe Nächster Schritt.
 
-## Blockiert — wartet auf Input
+- [x] **Kontingenterhöhung für Lambda bewilligt.** `aws lambda get-account-settings` meldet `ConcurrentExecutions: 1000` in `eu-central-1`. Damit ist Reserved Concurrency wieder möglich; gesetzt ist sie aber noch nicht (`get-function-concurrency` auf `liviana-chat` kommt leer zurück, Stand 2026-09-28). Befehl siehe Nächster Schritt.
+- [x] **Widget in `kettenki-website` gebaut und live.**
+- [x] **Kontaktformular als eigener Stack** (2026-09-07, Commit `71bb697`): `infra/contact.yaml`, `scripts/deploy-contact.ps1`, `src/contact/handler.py`. HTTP API, Lambda und SES, sonst nichts: keine Datenbank, keine Antwort an den Absender. Bewusst getrennt von der Liviana-Vorlage, damit ein Fehler am Formular den Chatbot nicht mitreisst und umgekehrt. Gleicher Stil wie Liviana (reines CloudFormation, nur boto3, `AllowedOrigin` ohne Default). Absender ist eine verifizierte SES-Identität, die Adresse der Kundschaft steht in `Reply-To`; SES darf im Sandkasten bleiben, weil der Empfänger immer das eigene Postfach ist.
 
-- **Kontingenterhöhung für Lambda, Status `CASE_OPENED`.** Solange AWS den Antrag nicht bewilligt hat, bleibt das Konto bei 10 gleichzeitigen Ausführungen und **jede** Reservierung wird abgelehnt, weil mindestens 10 unreserviert bleiben müssen. Der Antrag hängt an einem Support-Fall, wird also von Hand geprüft, üblicherweise innerhalb eines bis zwei Werktagen. Zu tun ist nichts, außer den Status abzufragen; falls im AWS-Support-Center eine Rückfrage auftaucht, muss Javi sie beantworten, sonst bleibt der Fall liegen.
+- [x] **`content.json` auf die neue Positionierung umgeschrieben** (2026-09-28, in S3 und live geprüft). Die Wissensbasis stand noch auf "KI-Prototypen", mit BAMBERA, LIVIANA und FANDANGO gleichrangig; KettenKI positioniert sich inzwischen als "Individuelle Softwareentwicklung für KMU" mit drei gleichrangigen Bereichen.
+  - **Struktur**: `produkte` heisst jetzt `angebot` und hat drei Einträge (`ki_chatbots_und_assistenten`, `websites`, `apps_nach_mass`). LIVIANA und BAMBERA hängen unter den Chatbots statt daneben. Neu sind `referenzen` (Kunde und Beispiele) und `frueheres` (nur FANDANGO). Das Format des Dokuments ist unverändert, `prompt.py` musste nicht angefasst werden: der Rollenblock nennt keine Produkte, alles steht in `identity.scope_note`.
+  - **Angebotsmodell** für alle drei Bereiche gleich: erste funktionierende Version kostenlos, bezahlt wird nur, wenn es weitergeht. Die Unterscheidung "Prototyp ohne SLA" gegen "Auftragsarbeit" (`zwei_arten_von_arbeit`, `hinweis_prototypen`, `modell_der_zusammenarbeit`) ist raus. `ablauf` spricht jetzt mit "wir" wie die Website, nicht mehr mit "ich". Der Claim steht geduzt drin ("Software, die du testest, bevor du dafür bezahlst"), weil `identity.voice` und die Website duzen.
+  - **BAMBERA** nur noch als abgeschlossener Pilot: drei Monate mit der Lumis Kaffeebar, nicht im Betrieb, Lumis keine aktuelle Kundin. Eine Team-Assistentin dieser Art bleibt aber Teil des Chatbot-Bereichs.
+  - **FANDANGO** nur auf ausdrückliche Frage, als früherer Prototyp, der nicht angeboten wird, ohne Details. Aus der Ablehnungsantwort gestrichen.
+  - **Einziges Kundenprojekt**: Spicy Feedback Tool für spicy kunstraum, im Betrieb. Dazu die ausdrückliche Zeile, dass es keine weiteren, auch keine vertraulichen Kunden gibt (siehe unten, warum).
+  - **Beispiele** (`kettenki.com/templates`): Atelier Lehm, Sprachwerk Bern, Ausstellungsraum Halle Neun, jeweils mit dem Hinweis, dass die Betriebe erfunden sind.
+  - **LIVIANA-Einordnung**: Termin- und Buchungsbetriebe (Fitness, Yoga, Praxen, Sprachschulen, Dienstleister, Wellness) als Beispiel für besonders guten Fit, ausdrücklich keine Grenze.
+  - **Live geprüft** mit sieben Fragen in ES, DE und EN. Richtig: Positionierung, Bambera als Pilot, Fandango ohne Details, Beispiele als fiktiv markiert, Yoga-Studio bekommt LIVIANA. **Ein Defekt, der nur live auffiel**: auf "Do you have any real clients?" nannte sie Spicy und erfand dazu "I can't name other clients due to confidentiality". Das Modell füllt die Lücke "nur ein Kunde darf genannt werden" mit einer plausiblen Begründung. Die Formulierung sagt jetzt, dass es der einzige Kunde ist, und verbietet die Andeutung weiterer. Nach dem Fix nachgefragt (EN und ES): keine erfundenen weiteren Kunden mehr. Neu aufgefallen: sie verortet spicy kunstraum "en Berna", was nicht in der Wissensbasis steht. Harmlos, falls es stimmt, sonst eine Ortsangabe in `referenzen.kundenprojekt` ergänzen.
+  - **58 Tests grün.** Vorher war einer rot, unabhängig von dieser Änderung: `test_no_client_data_is_hardcoded_in_the_source` fand "kettenki" in `src/contact/handler.py` (Commit `71bb697`). Der Test scannt jetzt nur `src/liviana`, weil das Kontaktformular absichtlich KettenKI-spezifisch ist.
 
-  Status abfragen:
+## Blockiert, wartet auf Input
 
-  ```powershell
-  aws service-quotas get-requested-service-quota-change `
-    --request-id 554e9c57d7d24d59b0a8092fdb44dc81sDpYzldS --region eu-central-1 `
-    --query "RequestedQuota.[Status,DesiredValue]" --output text
-  ```
-
-  Sobald dort `APPROVED` steht (und `aws lambda get-account-settings` einen Wert über 10 meldet), **diesen Befehl ausführen** — er ist bewusst noch nicht gelaufen, weil er bis dahin mit derselben Fehlermeldung scheitert wie beim ersten Deployversuch:
-
-  ```powershell
-  ./scripts/deploy.ps1 `
-    -ContentBucketName kettenki-liviana-content `
-    -AlertEmail info@kettenki.com `
-    -AllowedOrigin https://kettenki.com `
-    -Region eu-central-1 `
-    -MonthlyBudgetUsd 10 `
-    -ReservedConcurrency 5
-  ```
-
-  Danach `aws lambda get-function-concurrency --function-name liviana-chat --region eu-central-1` zur Gegenprobe: es muss `ReservedConcurrentExecutions: 5` zurückkommen.
+- Nichts. Die Kontingenterhöhung ist durch (siehe Erledigt).
 
 ## Nächster Schritt
 
-1. **Auf die Kontingentfreigabe warten**, dann den vorbereiteten Redeploy mit `-ReservedConcurrency 5` fahren (Befehl steht unter Blockiert). Das ist der einzige offene Punkt an der Infrastruktur, und er hängt an AWS, nicht an uns.
-2. **Die neuen Regeln am echten Modell beobachten.** `content.json` liegt seit dem 2026-08-25 in S3, die Änderungen sind also scharf. Zu prüfen ist genau das, was sich nur im Gespräch zeigt: Bietet sie den Kontakt jetzt seltener an, ohne unhöflich zu wirken? Nennt sie bei einer beschriebenen Not **eine** passende Lösung statt des Sortiments? Klingt sie weniger nach Prospekt? Wenn sie weiter zu früh zum Kontakt schickt, ist Regel 6 die Stellschraube; wenn sie zu trocken wird, `identity.voice`.
-3. **Das Widget ist gebaut und live** in `kettenki-website`, dieser Punkt ist erledigt.
+1. **Reserved Concurrency nachrüsten.** Das Kontingent steht auf 1000, die Reservierung fehlt noch. `-MonthlyBudgetUsd 10` muss mit, sonst setzt der Deploy das von Hand angehobene Budget auf 5 zurück:
+
+   ```powershell
+   ./scripts/deploy.ps1 `
+     -ContentBucketName kettenki-liviana-content `
+     -AlertEmail info@kettenki.com `
+     -AllowedOrigin https://kettenki.com `
+     -Region eu-central-1 `
+     -MonthlyBudgetUsd 10 `
+     -ReservedConcurrency 5
+   ```
+
+   Gegenprobe: `aws lambda get-function-concurrency --function-name liviana-chat --region eu-central-1` muss `ReservedConcurrentExecutions: 5` liefern.
+2. **Länge und Kontaktangebot nachschärfen.** Beim Live-Test am 2026-09-28 hielten sich zwei Regeln sichtbar nicht: die Antwort an das Yoga-Studio hatte zwei Absätze und rund acht Sätze (Regel 3), und die Frage nach Website-Beispielen bekam die E-Mail angehängt, obwohl niemand Kaufinteresse gezeigt hatte (Regel 6). Das ist Prompt-Verhalten, kein Inhalt; die Stellschrauben sind Regel 3 und 6 in `prompt.py` bzw. `-MaxTokens`.
 
 ## Offen (noch nicht begonnen)
 
-- [ ] **Reserved Concurrency nachrüsten**, sobald die beantragte Kontingenterhöhung durch ist. Aktuell mit `0` deployt, weil das Konto es nicht anders zulässt. Antrag läuft, Befehl steht bereit, siehe Blockiert.
+- [ ] **Reserved Concurrency nachrüsten.** Kontingent ist bewilligt, Befehl steht unter Nächster Schritt.
 - [ ] **Bekannter Rauer Kanten: Prompt-Injektionsversuche werden auf Deutsch abgewiesen**, auch wenn sie auf Englisch oder Spanisch geschrieben sind. Normale Themenablehnungen (Javi als Kandidat, Rechtsberatung) treffen die Sprache korrekt, verifiziert in DE, EN und ES. Nur der Injektionspfad fällt in die deutsche Stimme aus `identity.voice` zurück. Drei Prompt-Fassungen haben daran nichts geändert; der Schaden ist gering (ein Angreifer bekommt eine deutsche statt einer englischen Abfuhr), deshalb bewusst so gelassen. Wieder aufmachen, wenn es ein echtes Modell-Upgrade gibt oder jemand sich daran stört.
+- [ ] **Website nachziehen**: `services.html` zeigt FANDANGO noch als Karte und den Prototypen-Hinweis "ohne Garantie oder SLA" für die KI-Lösungen. Liviana sagt inzwischen etwas anderes; das gehört in `kettenki-website` angeglichen.
 - [ ] **Antwortlänge im Alltag beobachten.** Nach dem Fix liegen die Antworten bei drei bis vier Sätzen, also am oberen Rand der Regel. Wenn sie im Widget zu wuchtig wirken, ist `max_sentences` in `prompt.py` bzw. `-MaxTokens` im Deploy die Stellschraube.
-- [ ] Widget in `kettenki-website` (steht dort schon als offener Punkt: Katzen-Avatar, Zustände, `chat-mock.js`).
 - [ ] Bedrock Guardrails, falls sich nach echtem Traffic zeigt, dass Prompt plus enges Inhaltsdokument nicht reichen. Bewusst zurückgestellt, siehe Verworfen.
 - [ ] `.github/workflows` für die Tests, falls das Repo öffentlich wird und die grüne Suite sichtbar sein soll. Nicht dringend.
 
@@ -128,9 +132,9 @@ Bezieht sich auf `liviana-arquitectura.md` (die geschlossenen Architekturentsche
 - **Inhalt ändern heißt nicht deployen.** `content/content.json` bearbeiten, nach S3 kopieren, nach höchstens fünf Minuten (Cache-TTL) ist es live. Der Bucket ist versioniert, ein schlechter Edit ist zurückrollbar.
 - **Keine Gedankenstriche im Copy.** Gleiche Stilregel wie im Website-Repo, gilt auch für Texte im Inhaltsdokument.
 - **Keine Aussagen über aktive Produktion oder tägliche Nutzung von Bambera** — auch nicht im Prompt oder im Inhaltsdokument. Testdauer sind drei Monate.
-- **Reserved Concurrency ist zurzeit aus, nicht aus Überzeugung, sondern weil das Konto es verbietet.** Das Lambda-Kontingent für gleichzeitige Ausführungen steht auf 10, dem Wert für noch nicht hochgestufte Konten; AWS verlangt mindestens 10 unreservierte, also ist jede Reservierung unmöglich. Der Deploy scheiterte daran ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]"). Praktisch wirkt das Kontingent selbst wie eine Obergrenze von 10, nur kontoweit statt pro Funktion: ein Amoklauf in Liviana könnte also andere Lambdas im selben Konto aushungern, statt nur sich selbst zu drosseln. Nach der Kontingenterhöhung mit `-ReservedConcurrency 5` neu deployen.
+- **Reserved Concurrency ist zurzeit aus, nicht aus Überzeugung, sondern weil das Konto es verbietet.** Das Lambda-Kontingent für gleichzeitige Ausführungen steht auf 10, dem Wert für noch nicht hochgestufte Konten; AWS verlangt mindestens 10 unreservierte, also ist jede Reservierung unmöglich. Der Deploy scheiterte daran ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]"). Praktisch wirkt das Kontingent selbst wie eine Obergrenze von 10, nur kontoweit statt pro Funktion: ein Amoklauf in Liviana könnte also andere Lambdas im selben Konto aushungern, statt nur sich selbst zu drosseln. Das Kontingent ist inzwischen auf 1000 bewilligt; der Redeploy mit `-ReservedConcurrency 5` steht noch aus.
 - **Das Budget heißt `liviana-monthly`, misst aber das ganze Konto.** Es hat keine `CostFilters`, also zählt es jeden Dollar in `964907375727` mit, nicht nur Liviana. Das ist der eigentliche Grund, warum 5 USD täglich Alarm schlugen: der Betrag stammt nicht aus diesem Projekt. Wer es später sauber haben will, hängt einen Kostenfilter an die Budget-Ressource in `infra/template.yaml` (nach Tag oder nach Service) und gibt den Stack-Ressourcen ein gemeinsames Tag. Bis dahin gilt: die 10 USD sind eine Kontogrenze, keine Liviana-Grenze. Der Tagesdeckel von 500 Aufrufen ist das, was Liviana selbst begrenzt.
-- **Achtung Drift: das Budget gehört CloudFormation.** Die Anhebung auf 10 USD wurde von Hand gemacht, der Stack kennt sie nicht. **Der nächste Deploy setzt sie auf den Wert des Parameters zurück**, deshalb trägt der vorbereitete Redeploy-Befehl unter Blockiert jetzt `-MonthlyBudgetUsd 10`. Gleiches gilt für jede andere Änderung, die in der Konsole an Stack-Ressourcen gemacht wird: entweder im Template nachziehen oder beim Deploy mitgeben, sonst ist sie beim nächsten Lauf weg.
+- **Achtung Drift: das Budget gehört CloudFormation.** Die Anhebung auf 10 USD wurde von Hand gemacht, der Stack kennt sie nicht. **Der nächste Deploy setzt sie auf den Wert des Parameters zurück**, deshalb trägt der vorbereitete Redeploy-Befehl unter Nächster Schritt `-MonthlyBudgetUsd 10`. Gleiches gilt für jede andere Änderung, die in der Konsole an Stack-Ressourcen gemacht wird: entweder im Template nachziehen oder beim Deploy mitgeben, sonst ist sie beim nächsten Lauf weg.
 - **Die Kontingenterhöhung wurde per CLI beantragt, nicht über die Konsole.** `aws service-quotas request-service-quota-increase` erzeugt denselben Antrag und liefert eine Request-ID, die sich später skriptbar abfragen lässt, statt in einem Support-Fall nachschauen zu müssen. Beantragt wurde direkt 1000, der Normalwert eines regulären Kontos, statt einer knapp bemessenen Zwischenstufe: der Antrag kostet nichts und ein zweiter Anlauf in drei Monaten wäre reine Wiederholung.
 - **Der Mock kann Modellverhalten nicht prüfen, nur den Ablauf.** Alle vier Prompt-Defekte dieser Sitzung waren mit 56 grünen Tests unsichtbar und fielen erst beim ersten echten Bedrock-Aufruf auf. Für künftige Prompt-Änderungen gilt deshalb: nach dem Deploy mindestens einmal in DE, EN und ES gegenprüfen, mit einer Preisfrage, einer Frage nach technischen Interna und einer nach Javi als Kandidat.
 - **Ein Deploy ist billig, ein falscher Default teuer.** `AllowedOrigin` hat deshalb bewusst keinen Vorgabewert mehr. Lieber ein abgebrochener Deploy mit fehlendem Pflichtparameter als ein stiller `*` in Produktion.
@@ -151,6 +155,6 @@ Kurzform für den Einstieg in eine neue Sitzung:
 
 1. **Erst diese Datei lesen**, dann `liviana-arquitectura.md` (was geschlossen ist), dann `DECISIONS.md` (warum die Umsetzung so aussieht). `API.md` nur, wenn es um das Widget geht.
 2. **Läuft es noch?** `python -m pytest tests -q` → 58 Tests grün, ohne AWS-Konto. Danach `python tools/chat.py` für einen Dialog gegen den Mock, und `python tools/smoke.py https://mr3w04rnrf.execute-api.eu-central-1.amazonaws.com` gegen die echte API (kostet ein paar Aufrufe vom Tagesbudget).
-3. **Wo steht das Projekt?** Deployt und verifiziert in `eu-central-1`, Stack `liviana`, Code öffentlich auf GitHub. Offen sind nur noch die SNS-Bestätigung und der Redeploy mit Reserved Concurrency, sobald das Kontingent freigegeben ist. Der nächste Schritt steht oben.
+3. **Wo steht das Projekt?** Deployt und verifiziert in `eu-central-1`, Stack `liviana`, Code öffentlich auf GitHub. Offen ist an der Infrastruktur nur noch der Redeploy mit Reserved Concurrency (Kontingent ist bewilligt). Daneben läuft der Kontaktformular-Stack aus `infra/contact.yaml`. Der nächste Schritt steht oben.
 4. **Was nicht wieder aufmachen:** alles unter "Verworfen". Besonders WAF, RAG, SAM/CDK und der Verlauf im Browser.
 5. **Am Ende der Sitzung** diese Datei nachführen: Erledigtes nach unten in "Erledigt", Neues nach "Offen", Entscheidungen nach "Entscheidungen / Notizen", Datum in der Kopfzeile aktualisieren.
